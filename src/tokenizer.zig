@@ -1,0 +1,117 @@
+const std = @import("std");
+
+pub const TokenType = enum {
+    Identifier,
+    Number,
+    Plus,
+    Minus,
+    Slash,
+    Star,
+    Colon,
+    Newline,
+    KeywordLet,
+    TypeInt,
+    TypeFloat,
+    Eq,
+    LParen,
+    RParen,
+    Eof,
+};
+
+pub const Token = struct {
+    type: TokenType,
+    value: []const u8,
+};
+
+pub const Tokenizer = struct {
+    source: []const u8,
+    position: usize = 0,
+
+    pub fn next(self: *Tokenizer) !Token {
+        while (self.position < self.source.len) {
+            const char = self.source[self.position];
+            switch (char) {
+                ' ', '\t' => {
+                    self.position += 1; // Skip whitespace
+                    continue;
+                },
+                // Skip newlines ONLY if they are not part of an expression
+                '\n' => {
+                    self.position += 1;
+                    if (self.isMidExpression()) {
+                        // Treat newline as whitespace
+                        continue;
+                    } else {
+                        // Only return newline as statement separator if previous token wasn't newline
+                        if (self.position == 0 or self.source[self.position - 1] != '\n')
+                            return Token{ .type = .Newline, .value = "\n" };
+                    }
+                },
+                '+' => return self.singleToken(.Plus),
+                '-' => return self.singleToken(.Minus),
+                ':' => return self.singleToken(.Colon),
+                '=' => return self.singleToken(.Eq),
+                '(' => return self.singleToken(.LParen),
+                ')' => return self.singleToken(.RParen),
+                '0'...'9' => return self.parseNumber(),
+                'a'...'z', 'A'...'Z' => {
+                    const ident = self.parseIdentifier();
+                    return if (std.mem.eql(u8, ident.value, "let"))
+                        Token{ .type = .KeywordLet, .value = "let" }
+                    else if (std.mem.eql(u8, ident.value, "int"))
+                        Token{ .type = .TypeInt, .value = "int" }
+                    else if (std.mem.eql(u8, ident.value, "float"))
+                        Token{ .type = .TypeFloat, .value = "float" }
+                    else
+                        ident;
+                },
+                else => return error.InvalidCharacter,
+            }
+        }
+
+        return Token{ .type = .Eof, .value = "" };
+    }
+
+    fn singleToken(self: *Tokenizer, t_type: TokenType) Token {
+        const value = self.source[self.position .. self.position + 1];
+        self.position += 1;
+
+        return .{ .type = t_type, .value = value };
+    }
+
+    // Parse multi-digit numbers
+    fn parseNumber(self: *Tokenizer) Token {
+        const start = self.position;
+        while (self.position < self.source.len) : (self.position += 1) {
+            const c = self.source[self.position];
+            if (!std.ascii.isDigit(c) and c != '.') break;
+        }
+
+        return .{
+            .type = .Number,
+            .value = self.source[start..self.position],
+        };
+    }
+
+    fn parseIdentifier(self: *Tokenizer) Token {
+        const start = self.position;
+        while (self.position < self.source.len) : (self.position += 1) {
+            const c = self.source[self.position];
+            if (!std.ascii.isAlphanumeric(c)) break;
+        }
+
+        return .{
+            .type = .Identifier,
+            .value = self.source[start..self.position],
+        };
+    }
+
+    fn isMidExpression(self: *Tokenizer) bool {
+        if (self.position == 0) return false;
+        const prev_char = self.source[self.position - 1];
+        return switch (prev_char) {
+            '+', '-', '*', '/', '(', ')', ':' => true,
+            else => false,
+        };
+    }
+};

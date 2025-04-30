@@ -1,0 +1,12 @@
+# Zig stuff
+.zig-cache/
+zig-cache/
+zig-out/
+/release/
+/debug/
+/build/
+/build-*/
+/docgen_tmp/
+
+# Direnv
+/.direnv
