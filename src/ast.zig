@@ -42,6 +42,8 @@ pub const Expression = union(enum) {
     NumberLiteral: *NumberLiteral,
     BinaryOp: *BinaryOp,
     VariableRef: *VariableRef,
+    Lambda: *Lambda,
+    FunctionCall: *FunctionCall,
 
     pub fn deinit(self: *Expression, allocator: std.mem.Allocator) void {
         switch (self.*) {
@@ -56,8 +58,53 @@ pub const Expression = union(enum) {
             .VariableRef => |v| {
                 allocator.destroy(v);
             },
+            .Lambda => |l| {
+                l.body.deinit(allocator);
+                l.params.deinit();
+                allocator.destroy(l);
+            },
+            .FunctionCall => |f| {
+                f.callee.deinit(allocator);
+                f.args.deinit();
+                allocator.destroy(f);
+            },
         }
         allocator.destroy(self); // Also free the wrapper
+    }
+};
+
+
+pub const Param = struct {
+    name: []const u8,
+    type_name: []const u8,
+};
+
+pub const Lambda = struct {
+    params: std.ArrayList(Param),
+    return_type: []const u8,
+    body: *Expression,
+
+    pub fn create(allocator: std.mem.Allocator, params: std.ArrayList(Param), return_type: []const u8, body: *Expression) !*Expression {
+        const node = try allocator.create(Lambda);
+        node.* = .{ .params = params, .return_type = return_type, .body = body };
+
+        const expr = try allocator.create(Expression);
+        expr.* = .{ .Lambda = node };
+        return expr;
+    }
+};
+
+pub const FunctionCall = struct {
+    callee: *Expression,
+    args: std.ArrayList(*Expression),
+
+    pub fn create(allocator: std.mem.Allocator, callee: *Expression, args: std.ArrayList(*Expression)) !*Expression {
+        const node = try allocator.create(FunctionCall);
+        node.* = .{ .callee = callee, .args = args };
+
+        const expr = try allocator.create(Expression);
+        expr.* = .{ .FunctionCall = node };
+        return expr;
     }
 };
 

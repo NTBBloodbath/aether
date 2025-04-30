@@ -77,6 +77,58 @@ pub const Parser = struct {
         };
     }
 
+    fn parseLambda(self: *Parser) !*ast.Expression {
+        // fn(param: type) -> return_type { ... }
+        try self.expect(.KeywordFn);
+        try self.expect(.LParen);
+
+        var params = std.ArrayList(ast.Param).init(self.allocator);
+        while (self.current_token.type != .RParen) {
+            const name = try self.parseIdentifier();
+            try self.expect(.Colon);
+            const param_type = self.current_token.type;
+            const type_name = self.current_token.value;
+            try isValidType(param_type);
+            try self.advance();
+
+            try params.append(.{ .name = name.value, .type_name = type_name });
+
+            if (self.current_token.type != .Comma) break;
+            try self.advance();
+        }
+        try self.expect(.RParen);
+
+        // Parse return type
+        try self.expect(.Arrow);
+        const return_type = self.current_token.type;
+        const return_type_name = self.current_token.value;
+        try isValidType(return_type);
+        try self.advance();
+
+        // Parse body
+        try self.expect(.LBrace);
+        const body = try self.parseExpression();
+        try self.expect(.RBrace);
+
+        return ast.Lambda.create(self.allocator, params, return_type_name, body);
+    }
+
+    fn parseFunctionCall(self: *Parser, callee: *ast.Expression) !*ast.Expression {
+        try self.advance(); // Skip '('
+
+        var args = std.ArrayList(*ast.Expression).init(self.allocator);
+        while (self.current_token.type != .RParen) {
+            const arg = try self.parseExpression();
+            try args.append(arg);
+
+            if (self.current_token.type != .Comma) break;
+            try self.advance();
+        }
+        try self.expect(.RParen);
+
+        return ast.FunctionCall.create(self.allocator, callee, args);
+    }
+
     fn parsePrimary(self: *Parser) !*ast.Expression {
         return switch (self.current_token.type) {
             .Number => blk: {
@@ -91,10 +143,17 @@ pub const Parser = struct {
                 break :blk expr;
             },
             .Identifier => blk: {
-                const name = self.current_token.value;
+                const ident = try ast.VariableRef.create(self.allocator, self.current_token.value);
                 try self.advance();
-                break :blk try ast.VariableRef.create(self.allocator, name);
+
+                // Check if this is a function call
+                if (self.current_token.type == .LParen) {
+                    break :blk try self.parseFunctionCall(ident);
+                }
+
+                break :blk ident;
             },
+            .KeywordFn => self.parseLambda(),
             else => ParserError.UnexpectedToken,
         };
     }
@@ -111,7 +170,7 @@ pub const Parser = struct {
             const token_type = self.current_token.type;
             type_name = self.current_token.value;
             // Check if the type is valid
-            if (token_type != .TypeInt and token_type != .TypeFloat) return ParserError.InvalidType;
+            try isValidType(token_type);
             try self.advance();
         }
 
@@ -140,5 +199,11 @@ pub const Parser = struct {
         }
 
         try self.advance();
+    }
+
+    fn isValidType(token_type: TokenType) !void {
+        if (token_type != .TypeInt and token_type != .TypeFloat) {
+            return ParserError.InvalidType;
+        }
     }
 };

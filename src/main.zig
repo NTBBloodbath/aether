@@ -47,6 +47,24 @@ fn printExpr(expr: *ast.Expression, indent: usize) void {
         .VariableRef => |ref| {
             std.debug.print("VariableRef({s})\n", .{ref.name});
         },
+        .Lambda => |lambda| {
+            std.debug.print("Lambda({s})\n", .{lambda.return_type});
+            printExpr(lambda.body, indent + 1);
+            for (lambda.params.items) |param| {
+                var j: usize = 0;
+                while (j < indent + 1) : (j += 1) {
+                    std.debug.print("  ", .{});
+                }
+                std.debug.print("Param({s}, {s})\n", .{param.name, param.type_name});
+            }
+        },
+        .FunctionCall => |call| {
+            std.debug.print("FunctionCall\n", .{});
+            printExpr(call.callee, indent + 1);
+            for (call.args.items) |arg| {
+                printExpr(arg, indent + 2);
+            }
+        },
     }
 }
 
@@ -54,7 +72,10 @@ pub fn main() !void {
     const input =
         \\let x = 5
         \\let y: float = 2.5
-        \\let z = x + y
+        \\
+        \\let add = fn(a: int, b: float) -> float { a + b }
+        \\let z = add(x, y)
+        \\z
     ;
     std.debug.print("Input:\n{s}\n\n", .{input});
 

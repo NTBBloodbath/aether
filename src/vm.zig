@@ -5,6 +5,12 @@ const ast = @import("ast.zig");
 pub const Value = union(enum) {
     Int: i64,
     Float: f64,
+    Function: *Closure,
+
+    pub const Closure = struct {
+        lambda: *ast.Lambda,
+        env: std.StringHashMap(Value),
+    };
 
     // NOTE: unused atm, I no longer remember why I wrote this in first place
     // pub fn format(self: Value, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
@@ -100,6 +106,42 @@ pub const VM = struct {
             .VariableRef => |v| {
                 const value = self.env.get(v.name) orelse return error.UndefinedVariable;
                 try self.stack.append(value);
+            },
+            .Lambda => |lambda| {
+                // Capture current environment
+                const closure = try self.allocator.create(Value.Closure);
+                closure.* = .{ .lambda = lambda, .env = self.env.clone() catch unreachable };
+                try self.stack.append(.{ .Function = closure });
+            },
+            .FunctionCall => |call| {
+                try self.eval_expr(call.callee);
+                const closure = self.stack.pop().?.Function;
+
+                // Evaluate arguments
+                var args = std.ArrayList(Value).init(self.allocator);
+                for (call.args.items) |arg_expr| {
+                    try self.eval_expr(arg_expr);
+                    try args.append(self.stack.pop().?);
+                }
+
+                // Push new scope
+                const parent_env = self.env;
+                self.env = closure.env.clone() catch unreachable;
+
+                // Bind parameters
+                for (closure.lambda.params.items, args.items) |param, arg| {
+                    try self.env.put(param.name, arg);
+                }
+
+                // Evaluate body
+                try self.eval_expr(closure.lambda.body);
+                const result = self.stack.pop().?;
+
+                // Restore environment
+                self.env.deinit();
+                self.env = parent_env;
+
+                try self.stack.append(result);
             },
         };
     }

@@ -8,13 +8,18 @@ pub const TokenType = enum {
     Slash,
     Star,
     Colon,
+    Comma,
     Newline,
     KeywordLet,
+    KeywordFn,
     TypeInt,
     TypeFloat,
     Eq,
+    Arrow,
     LParen,
     RParen,
+    LBrace,
+    RBrace,
     Eof,
 };
 
@@ -48,16 +53,28 @@ pub const Tokenizer = struct {
                     }
                 },
                 '+' => return self.singleToken(.Plus),
-                '-' => return self.singleToken(.Minus),
+                '-' => {
+                    // Check for arrow
+                    if (self.position + 1 < self.source.len and self.source[self.position + 1] == '>') {
+                        self.position += 2;
+                        return Token{ .type = .Arrow, .value = "->" };
+                    }
+                    return self.singleToken(.Minus);
+                },
                 ':' => return self.singleToken(.Colon),
+                ',' => return self.singleToken(.Comma),
                 '=' => return self.singleToken(.Eq),
                 '(' => return self.singleToken(.LParen),
                 ')' => return self.singleToken(.RParen),
+                '{' => return self.singleToken(.LBrace),
+                '}' => return self.singleToken(.RBrace),
                 '0'...'9' => return self.parseNumber(),
                 'a'...'z', 'A'...'Z' => {
                     const ident = self.parseIdentifier();
                     return if (std.mem.eql(u8, ident.value, "let"))
                         Token{ .type = .KeywordLet, .value = "let" }
+                    else if (std.mem.eql(u8, ident.value, "fn"))
+                        Token{ .type = .KeywordFn, .value = "fn" }
                     else if (std.mem.eql(u8, ident.value, "int"))
                         Token{ .type = .TypeInt, .value = "int" }
                     else if (std.mem.eql(u8, ident.value, "float"))
