@@ -62,7 +62,8 @@ pub const Tokenizer = struct {
                     }
                     return self.singleToken(.Minus);
                 },
-                ':' => return self.singleToken(.Colon),
+                '*' => return self.singleToken(.Star),
+                '/' => return self.singleToken(.Slash),                ':' => return self.singleToken(.Colon),
                 ',' => return self.singleToken(.Comma),
                 '=' => return self.singleToken(.Eq),
                 '(' => return self.singleToken(.LParen),
