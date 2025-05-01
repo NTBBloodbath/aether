@@ -9,7 +9,7 @@ pub const Value = union(enum) {
 
     pub const Closure = struct {
         lambda: *ast.Lambda,
-        env: std.StringHashMap(Value),
+        env: *Environment,
     };
 
     // NOTE: unused atm, I no longer remember why I wrote this in first place
@@ -23,15 +23,34 @@ pub const Value = union(enum) {
     // }
 };
 
+pub const Environment = struct {
+    parent: ?*Environment,
+    values: std.StringHashMap(Value),
+
+    pub fn create(allocator: std.mem.Allocator, parent: ?*Environment) !*Environment {
+        const env = try allocator.create(Environment);
+        env.* = .{
+            .parent = parent,
+            .values = std.StringHashMap(Value).init(allocator),
+        };
+        return env;
+    }
+
+    pub fn get(self: *Environment, key: []const u8) ?Value {
+        return self.values.get(key) orelse if (self.parent) |p| p.get(key) else null;
+    }
+};
+
 pub const VM = struct {
     allocator: std.mem.Allocator,
-    env: std.StringHashMap(Value),
+    env: *Environment,
     stack: std.ArrayList(Value),
 
-    pub fn init(allocator: std.mem.Allocator) VM {
+    pub fn init(allocator: std.mem.Allocator) !VM {
+        const root_env = try Environment.create(allocator, null);
         return .{
             .allocator = allocator,
-            .env = std.StringHashMap(Value).init(allocator),
+            .env = root_env,
             .stack = std.ArrayList(Value).init(allocator),
         };
     }
@@ -49,7 +68,7 @@ pub const VM = struct {
                     if (!is_float and !is_int) return error.TypeMismatch;
                 }
 
-                try self.env.put(v.name, value);
+                try self.env.values.put(v.name, value);
             },
             .Expr => |e| try self.eval_expr(e),
             .Return => |ret| try self.eval_expr(ret.value),
@@ -105,13 +124,19 @@ pub const VM = struct {
                 try self.stack.append(result);
             },
             .VariableRef => |v| {
-                const value = self.env.get(v.name) orelse return error.UndefinedVariable;
+                const value = self.env.values.get(v.name) orelse return error.UndefinedVariable;
                 try self.stack.append(value);
             },
             .Lambda => |lambda| {
                 // Capture current environment
+                // const closure = try self.allocator.create(Value.Closure);
+                // const closure_env = try Environment.create(self.allocator, self.env);
+                // closure.* = .{ .lambda = lambda, .env = closure_env };
+                // try self.stack.append(.{ .Function = closure });
+                const closure_env = try Environment.create(self.allocator, self.env);
+
                 const closure = try self.allocator.create(Value.Closure);
-                closure.* = .{ .lambda = lambda, .env = self.env.clone() catch unreachable };
+                closure.* = .{ .env = closure_env, .lambda = lambda };
                 try self.stack.append(.{ .Function = closure });
             },
             .FunctionCall => |call| {
@@ -122,25 +147,42 @@ pub const VM = struct {
                 var args = std.ArrayList(Value).init(self.allocator);
                 for (call.args.items) |arg_expr| {
                     try self.eval_expr(arg_expr);
-                    try args.append(self.stack.pop().?);
+                    const arg_val = self.stack.pop().?;
+                    try args.append(arg_val);
+
+                    // Parameters type validation
+                    const param = closure.lambda.params.items[args.items.len - 1];
+                    try checkType(param.type_name, arg_val);
                 }
 
-                // Push new scope
+                // Create nested environment for closure
                 const parent_env = self.env;
-                self.env = closure.env.clone() catch unreachable;
+                var call_env = std.StringHashMap(Value).init(self.allocator);
 
-                // Bind parameters
-                for (closure.lambda.params.items, args.items) |param, arg| {
-                    try self.env.put(param.name, arg);
+                // Inherit from closure's environment
+                var iter = closure.env.values.iterator();
+                while (iter.next()) |entry| {
+                    try call_env.put(entry.key_ptr.*, entry.value_ptr.*);
                 }
 
-                // Evaluate body
+                // Bind parameters with shadowing
+                for (closure.lambda.params.items, args.items) |param, arg| {
+                    try call_env.put(param.name, arg);
+                }
+
+                // Execute in nested environment then restore current environment
+                self.env.values = try call_env.clone();
+                defer {
+                    self.env = parent_env;
+                    call_env.deinit();
+                }
+
+                // Evaluate function body
                 try self.eval_expr(closure.lambda.body);
                 const result = self.stack.pop().?;
 
-                // Restore environment
-                self.env.deinit();
-                self.env = parent_env;
+                // Return type validation
+                try checkType(closure.lambda.return_type, result);
 
                 try self.stack.append(result);
             },
@@ -157,6 +199,20 @@ pub const VM = struct {
             return .{ .Float = try std.fmt.parseFloat(f64, value) };
         } else {
             return .{ .Int = try std.fmt.parseInt(i64, value, 10) };
+        }
+    }
+
+    fn getTypeName(val: Value) []const u8 {
+        return switch (val) {
+            .Int => "int",
+            .Float => "float",
+            .Function => "function",
+        };
+    }
+
+    fn checkType(expected: []const u8, actual: Value) !void {
+        if (!std.mem.eql(u8, expected, getTypeName(actual))) {
+            return error.TypeMismatch;
         }
     }
 };

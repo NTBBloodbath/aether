@@ -94,7 +94,7 @@ pub fn main() !void {
         printStatement(stmt, 0);
     }
 
-    var vm = VM.init(std.heap.page_allocator);
+    var vm = try VM.init(std.heap.page_allocator);
     for (program.statements.items) |stmt| {
         try vm.eval(stmt);
     }
