@@ -12,6 +12,7 @@ pub const TokenType = enum {
     Newline,
     KeywordLet,
     KeywordFn,
+    KeywordReturn,
     TypeInt,
     TypeFloat,
     Eq,
@@ -75,6 +76,8 @@ pub const Tokenizer = struct {
                         Token{ .type = .KeywordLet, .value = "let" }
                     else if (std.mem.eql(u8, ident.value, "fn"))
                         Token{ .type = .KeywordFn, .value = "fn" }
+                    else if (std.mem.eql(u8, ident.value, "return"))
+                        Token{ .type = .KeywordReturn, .value = "return" }
                     else if (std.mem.eql(u8, ident.value, "int"))
                         Token{ .type = .TypeInt, .value = "int" }
                     else if (std.mem.eql(u8, ident.value, "float"))

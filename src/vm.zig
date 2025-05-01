@@ -52,6 +52,7 @@ pub const VM = struct {
                 try self.env.put(v.name, value);
             },
             .Expr => |e| try self.eval_expr(e),
+            .Return => |ret| try self.eval_expr(ret.value),
         }
     }
 
@@ -142,6 +143,11 @@ pub const VM = struct {
                 self.env = parent_env;
 
                 try self.stack.append(result);
+            },
+            .ReturnStmt => |ret| {
+                try self.eval_expr(ret.value);
+                const value = self.stack.pop().?;
+                try self.stack.append(value);
             },
         };
     }

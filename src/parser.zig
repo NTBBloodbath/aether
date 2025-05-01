@@ -53,6 +53,15 @@ pub const Parser = struct {
                 stmt.* = .{ .VariableDecl = decl };
                 break :blk stmt;
             },
+            .KeywordReturn => blk: {
+                const expr = try self.parseExpression();
+                const ret = try self.allocator.create(ast.ReturnStmt);
+                ret.* = .{ .value = expr };
+
+                const stmt = try self.allocator.create(ast.Statement);
+                stmt.* = .{ .Return = ret };
+                break :blk stmt;
+            },
             else => blk: {
                 const expr = try self.parseExpression();
                 const stmt = try self.allocator.create(ast.Statement);
@@ -154,6 +163,7 @@ pub const Parser = struct {
                 break :blk ident;
             },
             .KeywordFn => self.parseLambda(),
+            .KeywordReturn => try self.parseReturn(),
             else => ParserError.UnexpectedToken,
         };
     }
@@ -178,6 +188,15 @@ pub const Parser = struct {
         const value = try self.parseExpression();
         const variable = try ast.VariableDecl.create(self.allocator, name.value, type_name, value);
         return variable.VariableDecl;
+    }
+
+    // Parses return in expressions (e.g. function body)
+    fn parseReturn(self: *Parser) !*ast.Expression {
+        // Ensure we are starting with 'return'
+        try self.expect(.KeywordReturn);
+
+        const expr = try self.parseExpression();
+        return try ast.ReturnStmt.create(self.allocator, expr);
     }
 
     fn parseIdentifier(self: *Parser) !Token {

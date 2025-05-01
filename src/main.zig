@@ -22,11 +22,12 @@ fn printStatement(stmt: *ast.Statement, indent: usize) void {
 
     switch (stmt.*) {
         .VariableDecl => |decl| {
-            const foo = if (decl.type_name == null) "inferred" else decl.type_name.?;
-            std.debug.print("VariableDecl({s}, {s})\n", .{ decl.name, foo });
+            const var_type = if (decl.type_name == null) "inferred" else decl.type_name.?;
+            std.debug.print("VariableDecl({s}, {s})\n", .{ decl.name, var_type });
             printExpr(decl.value, indent + 1);
         },
         .Expr => |e| printExpr(e, indent),
+        .Return => |ret| printExpr(ret.value, indent),
     }
 }
 
@@ -65,6 +66,10 @@ fn printExpr(expr: *ast.Expression, indent: usize) void {
                 printExpr(arg, indent + 2);
             }
         },
+        .ReturnStmt => |ret| {
+            std.debug.print("Return\n", .{});
+            printExpr(ret.value, indent + 1);
+        },
     }
 }
 
@@ -73,9 +78,10 @@ pub fn main() !void {
         \\let x = 5
         \\let y: float = 2.5
         \\
-        \\let add = fn(a: int, b: float) -> float { a + b }
+        \\let add = fn(a: int, b: float) -> float { return a + b }
         \\let z = add(x, y)
-        \\z
+        \\let a = return z
+        \\return a
     ;
     std.debug.print("Input:\n{s}\n\n", .{input});
 

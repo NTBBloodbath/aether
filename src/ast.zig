@@ -25,6 +25,7 @@ pub const Program = struct {
 pub const Statement = union(enum) {
     VariableDecl: *VariableDecl,
     Expr: *Expression,
+    Return: *ReturnStmt,
 
     pub fn deinit(self: *Statement, allocator: std.mem.Allocator) void {
         switch (self.*) {
@@ -33,8 +34,25 @@ pub const Statement = union(enum) {
                 allocator.destroy(v);
             },
             .Expr => |expr| expr.deinit(allocator),
+            .Return => |ret| {
+                ret.value.deinit(allocator);
+                allocator.destroy(ret);
+            },
         }
         allocator.destroy(self); // Also free the wrapper
+    }
+};
+
+pub const ReturnStmt = struct {
+    value: *Expression,
+
+    pub fn create(allocator: std.mem.Allocator, ret: *Expression) !*Expression {
+        const node = try allocator.create(ReturnStmt);
+        node.* = .{ .value = ret };
+
+        const expr = try allocator.create(Expression);
+        expr.* = .{ .ReturnStmt = node };
+        return expr;
     }
 };
 
@@ -44,6 +62,7 @@ pub const Expression = union(enum) {
     VariableRef: *VariableRef,
     Lambda: *Lambda,
     FunctionCall: *FunctionCall,
+    ReturnStmt: *ReturnStmt, // Allow return in expressions
 
     pub fn deinit(self: *Expression, allocator: std.mem.Allocator) void {
         switch (self.*) {
@@ -68,11 +87,14 @@ pub const Expression = union(enum) {
                 f.args.deinit();
                 allocator.destroy(f);
             },
+            .ReturnStmt => |ret| {
+                ret.value.deinit(allocator);
+                allocator.destroy(ret);
+            }
         }
         allocator.destroy(self); // Also free the wrapper
     }
 };
-
 
 pub const Param = struct {
     name: []const u8,
