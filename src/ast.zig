@@ -58,16 +58,21 @@ pub const ReturnStmt = struct {
 
 pub const Expression = union(enum) {
     NumberLiteral: *NumberLiteral,
+    BooleanLiteral: *BooleanLiteral,
     BinaryOp: *BinaryOp,
     VariableRef: *VariableRef,
     Lambda: *Lambda,
     FunctionCall: *FunctionCall,
     ReturnStmt: *ReturnStmt, // Allow return in expressions
+    IfExpr: *IfExpr,
 
     pub fn deinit(self: *Expression, allocator: std.mem.Allocator) void {
         switch (self.*) {
             .NumberLiteral => |n| {
                 allocator.destroy(n);
+            },
+            .BooleanLiteral => |b| {
+                allocator.destroy(b);
             },
             .BinaryOp => |b| {
                 b.left.deinit(allocator);
@@ -90,9 +95,31 @@ pub const Expression = union(enum) {
             .ReturnStmt => |ret| {
                 ret.value.deinit(allocator);
                 allocator.destroy(ret);
-            }
+            },
+            .IfExpr => |if_expr| {
+                if_expr.condition.deinit(allocator);
+                if_expr.then_branch.deinit(allocator);
+                if (if_expr.else_branch) |else_expr| {
+                    else_expr.deinit(allocator);
+                }
+            },
         }
         allocator.destroy(self); // Also free the wrapper
+    }
+};
+
+pub const IfExpr = struct {
+    condition: *Expression,
+    then_branch: *Expression,
+    else_branch: ?*Expression,
+
+    pub fn create(allocator: std.mem.Allocator, condition: *Expression, then_branch: *Expression, else_branch: ?*Expression) !*Expression {
+        const node = try allocator.create(IfExpr);
+        node.* = .{ .condition = condition, .then_branch = then_branch, .else_branch = else_branch };
+
+        const expr = try allocator.create(Expression);
+        expr.* = .{ .IfExpr = node };
+        return expr;
     }
 };
 
@@ -139,6 +166,19 @@ pub const NumberLiteral = struct {
 
         const expr = try allocator.create(Expression);
         expr.* = .{ .NumberLiteral = node };
+        return expr;
+    }
+};
+
+pub const BooleanLiteral = struct {
+    value: bool,
+
+    pub fn create(allocator: std.mem.Allocator, value: bool) !*Expression {
+        const node = try allocator.create(BooleanLiteral);
+        node.* = .{ .value = value };
+
+        const expr = try allocator.create(Expression);
+        expr.* = .{ .BooleanLiteral = node };
         return expr;
     }
 };

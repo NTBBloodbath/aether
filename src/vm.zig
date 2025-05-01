@@ -5,6 +5,7 @@ const ast = @import("ast.zig");
 pub const Value = union(enum) {
     Int: i64,
     Float: f64,
+    Bool: bool,
     Function: *Closure,
 
     pub const Closure = struct {
@@ -19,6 +20,7 @@ pub const Value = union(enum) {
         switch (self) {
             .Int => |v| try writer.print("{d}", .{v}),
             .Float => |v| try writer.print("{d:.2}", .{v}),
+            .Bool => |v| try writer.print("{s}", .{if (v) "true" else "false"}),
             else => try writer.print("{any}", .{self}),
         }
     }
@@ -66,7 +68,8 @@ pub const VM = struct {
                 if (v.type_name) |t| {
                     const is_float = std.mem.eql(u8, t, "float") and value == .Float;
                     const is_int = std.mem.eql(u8, t, "int") and value == .Int;
-                    if (!is_float and !is_int) return error.TypeMismatch;
+                    const is_bool = std.mem.eql(u8, t, "bool") and value == .Bool;
+                    if (!is_float and !is_int and !is_bool) return error.TypeMismatch;
                 }
 
                 try self.env.values.put(v.name, value);
@@ -80,6 +83,15 @@ pub const VM = struct {
         return switch (node.*) {
             .NumberLiteral => |n| {
                 const value = try inferType(n.value);
+                try self.stack.append(value);
+            },
+            .BooleanLiteral => |b| {
+                // Convert the boolean into a string so we can infer the type
+                const bool_type = switch (b.value) {
+                    true => "true",
+                    false => "false",
+                };
+                const value = try inferType(bool_type);
                 try self.stack.append(value);
             },
             .BinaryOp => |b| {
@@ -120,6 +132,12 @@ pub const VM = struct {
                         const rf = if (right == .Int) @as(f64, @floatFromInt(right.Int)) else right.Float;
                         break :blk Value{ .Float = lf * rf };
                     },
+                    .EqEq => compareValues(left, right, .eq),
+                    .NotEq => compareValues(left, right, .neq),
+                    .Less => compareValues(left, right, .lt),
+                    .LessEq => compareValues(left, right, .lte),
+                    .Greater => compareValues(left, right, .gt),
+                    .GreaterEq => compareValues(left, right, .gte),
                     else => unreachable, // It should be impossible to reach this
                 };
                 try self.stack.append(result);
@@ -130,10 +148,6 @@ pub const VM = struct {
             },
             .Lambda => |lambda| {
                 // Capture current environment
-                // const closure = try self.allocator.create(Value.Closure);
-                // const closure_env = try Environment.create(self.allocator, self.env);
-                // closure.* = .{ .lambda = lambda, .env = closure_env };
-                // try self.stack.append(.{ .Function = closure });
                 const closure_env = try Environment.create(self.allocator, self.env);
 
                 const closure = try self.allocator.create(Value.Closure);
@@ -192,14 +206,44 @@ pub const VM = struct {
                 const value = self.stack.pop().?;
                 try self.stack.append(value);
             },
+            .IfExpr => |if_expr| {
+                try self.eval_expr(if_expr.condition);
+                const cond_val = self.stack.pop().?;
+                const is_true = switch (cond_val) {
+                    .Int => |i| i != 0,
+                    .Float => |f| f != 0.0,
+                    .Bool => |b| b,
+                    else => return error.TypeError,
+                };
+
+                if (is_true) {
+                    try self.eval_expr(if_expr.then_branch);
+                } else if (if_expr.else_branch) |else_expr| {
+                    try self.eval_expr(else_expr);
+                } else {
+                    // Default to false
+                    try self.stack.append(.{ .Bool = false });
+                }
+            },
         };
     }
 
     fn inferType(value: []const u8) !Value {
-        if (std.mem.indexOf(u8, value, ".")) |_| {
-            return .{ .Float = try std.fmt.parseFloat(f64, value) };
+        if (std.ascii.isDigit(value[0])) {
+            // Numbers
+            if (std.mem.indexOf(u8, value, ".")) |_| {
+                return .{ .Float = try std.fmt.parseFloat(f64, value) };
+            } else {
+                return .{ .Int = try std.fmt.parseInt(i64, value, 10) };
+            }
         } else {
-            return .{ .Int = try std.fmt.parseInt(i64, value, 10) };
+            // Boolean
+            if (std.mem.eql(u8, value, "true")) {
+                return .{ .Bool = true };
+            } else if (std.mem.eql(u8, value, "false")) {
+                return .{ .Bool = false };
+            }
+            return error.CannotInferType;
         }
     }
 
@@ -207,6 +251,7 @@ pub const VM = struct {
         return switch (val) {
             .Int => "int",
             .Float => "float",
+            .Bool => "bool",
             .Function => "function",
         };
     }
@@ -215,5 +260,34 @@ pub const VM = struct {
         if (!std.mem.eql(u8, expected, getTypeName(actual))) {
             return error.TypeMismatch;
         }
+    }
+
+    fn compareValues(a: Value, b: Value, op: enum { eq, neq, lt, lte, gt, gte }) Value {
+        const cmp = switch (a) {
+            .Int => |a_val| switch (b) {
+                .Int => |b_val| compare(a_val, b_val, op),
+                .Float => |b_val| compare(@as(f64, @floatFromInt(a_val)), b_val, op),
+                else => unreachable,
+            },
+            .Float => |a_val| switch (b) {
+                .Int => |b_val| compare(a_val, @as(f64, @floatFromInt(b_val)), op),
+                .Float => |b_val| compare(a_val, b_val, op),
+                else => unreachable,
+            },
+            else => unreachable,
+        };
+
+        return .{ .Bool = cmp };
+    }
+
+    fn compare(a: anytype, b: anytype, op: anytype) bool {
+        return switch (op) {
+            .eq => a == b,
+            .neq => a != b,
+            .lt => a < b,
+            .lte => a <= b,
+            .gt => a > b,
+            .gte => a >= b,
+        };
     }
 };

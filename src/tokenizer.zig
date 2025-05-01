@@ -13,9 +13,20 @@ pub const TokenType = enum {
     KeywordLet,
     KeywordFn,
     KeywordReturn,
+    KeywordIf,
+    KeywordElse,
+    KeywordTrue,
+    KeywordFalse,
     TypeInt,
     TypeFloat,
+    TypeBool,
     Eq,
+    EqEq,
+    NotEq,
+    Less,
+    LessEq,
+    Greater,
+    GreaterEq,
     Arrow,
     LParen,
     RParen,
@@ -63,9 +74,39 @@ pub const Tokenizer = struct {
                     return self.singleToken(.Minus);
                 },
                 '*' => return self.singleToken(.Star),
-                '/' => return self.singleToken(.Slash),                ':' => return self.singleToken(.Colon),
+                '/' => return self.singleToken(.Slash),
+                ':' => return self.singleToken(.Colon),
                 ',' => return self.singleToken(.Comma),
-                '=' => return self.singleToken(.Eq),
+                '=' => {
+                    if (self.position + 1 < self.source.len and self.source[self.position + 1] == '=') {
+                        self.position += 2;
+                        return Token{ .type = .EqEq, .value = "==" };
+                    }
+                    return self.singleToken(.Eq);
+                },
+                '<' => {
+                    if (self.position + 1 < self.source.len and self.source[self.position + 1] == '=') {
+                        self.position += 2;
+                        return Token{ .type = .LessEq, .value = "<=" };
+                    }
+                    return self.singleToken(.Less);
+                },
+                '>' => {
+                    if (self.position + 1 < self.source.len and self.source[self.position + 1] == '=') {
+                        self.position += 2;
+                        return Token{ .type = .GreaterEq, .value = ">=" };
+                    }
+                    return self.singleToken(.Greater);
+                },
+                '!' => {
+                    if (self.position + 1 < self.source.len and self.source[self.position + 1] == '=') {
+                        self.position += 2;
+                        return Token{ .type = .NotEq, .value = "!=" };
+                    }
+                    // TODO: handle this case as a boolean condition checker
+                    // return self.singleToken(.Not);
+                    return error.InvalidCharacter;
+                },
                 '(' => return self.singleToken(.LParen),
                 ')' => return self.singleToken(.RParen),
                 '{' => return self.singleToken(.LBrace),
@@ -73,7 +114,11 @@ pub const Tokenizer = struct {
                 '0'...'9' => return self.parseNumber(),
                 'a'...'z', 'A'...'Z' => {
                     const ident = self.parseIdentifier();
-                    return if (std.mem.eql(u8, ident.value, "let"))
+                    return if (std.mem.eql(u8, ident.value, "if"))
+                        Token{ .type = .KeywordIf, .value = "if"}
+                    else if (std.mem.eql(u8, ident.value, "else"))
+                        Token{ .type = .KeywordElse, .value = "else" }
+                    else if (std.mem.eql(u8, ident.value, "let"))
                         Token{ .type = .KeywordLet, .value = "let" }
                     else if (std.mem.eql(u8, ident.value, "fn"))
                         Token{ .type = .KeywordFn, .value = "fn" }
@@ -83,6 +128,12 @@ pub const Tokenizer = struct {
                         Token{ .type = .TypeInt, .value = "int" }
                     else if (std.mem.eql(u8, ident.value, "float"))
                         Token{ .type = .TypeFloat, .value = "float" }
+                    else if (std.mem.eql(u8, ident.value, "true"))
+                        Token{ .type = .KeywordTrue, .value = "true" }
+                    else if (std.mem.eql(u8, ident.value, "false"))
+                        Token{ .type = .KeywordFalse, .value = "false" }
+                    else if (std.mem.eql(u8, ident.value, "bool"))
+                        Token{ .type = .TypeBool, .value = "bool" }
                     else
                         ident;
                 },

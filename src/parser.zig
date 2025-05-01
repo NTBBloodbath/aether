@@ -75,7 +75,7 @@ pub const Parser = struct {
         const left = try self.parsePrimary();
 
         return switch (self.current_token.type) {
-            .Plus, .Minus, .Slash, .Star => {
+            .Plus, .Minus, .Slash, .Star, .EqEq, .NotEq, .Less, .LessEq, .Greater, .GreaterEq => {
                 const op_token = self.current_token;
                 try self.advance();
                 const right = try self.parseExpression();
@@ -162,8 +162,17 @@ pub const Parser = struct {
 
                 break :blk ident;
             },
-            .KeywordFn => self.parseLambda(),
+            .KeywordFn => try self.parseLambda(),
             .KeywordReturn => try self.parseReturn(),
+            .KeywordIf => try self.parseIfExpr(),
+            .KeywordTrue =>{
+                try self.advance();
+                return ast.BooleanLiteral.create(self.allocator, true);
+            },
+            .KeywordFalse =>{
+                try self.advance();
+                return ast.BooleanLiteral.create(self.allocator, false);
+            },
             else => ParserError.UnexpectedToken,
         };
     }
@@ -188,6 +197,25 @@ pub const Parser = struct {
         const value = try self.parseExpression();
         const variable = try ast.VariableDecl.create(self.allocator, name.value, type_name, value);
         return variable.VariableDecl;
+    }
+
+    fn parseIfExpr(self: *Parser) !*ast.Expression {
+        // Ensure we are starting with 'if'
+        try self.expect(.KeywordIf);
+        const condition = try self.parseExpression();
+        try self.expect(.LBrace);
+        const then_branch = try self.parseExpression();
+        try self.expect(.RBrace);
+
+        var else_branch: ?*ast.Expression = null;
+        if (self.current_token.type == .KeywordElse) {
+            try self.advance();
+            try self.expect(.LBrace);
+            else_branch = try self.parseExpression();
+            try self.expect(.RBrace);
+        }
+
+        return ast.IfExpr.create(self.allocator, condition, then_branch, else_branch);
     }
 
     // Parses return in expressions (e.g. function body)
@@ -221,7 +249,7 @@ pub const Parser = struct {
     }
 
     fn isValidType(token_type: TokenType) !void {
-        if (token_type != .TypeInt and token_type != .TypeFloat) {
+        if (token_type != .TypeInt and token_type != .TypeFloat and token_type != .TypeBool) {
             return ParserError.InvalidType;
         }
     }

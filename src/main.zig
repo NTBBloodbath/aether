@@ -40,6 +40,7 @@ fn printExpr(expr: *ast.Expression, indent: usize) void {
 
     switch (expr.*) {
         .NumberLiteral => |n| std.debug.print("Number({s})\n", .{n.value}),
+        .BooleanLiteral => |b| std.debug.print("Boolean({any})\n", .{b.value}),
         .BinaryOp => |b| {
             std.debug.print("BinaryOp({s})\n", .{b.op.value});
             printExpr(b.left, indent + 1);
@@ -70,6 +71,12 @@ fn printExpr(expr: *ast.Expression, indent: usize) void {
             std.debug.print("Return\n", .{});
             printExpr(ret.value, indent + 1);
         },
+        .IfExpr => |if_expr| {
+            std.debug.print("IfExpr\n", .{});
+            printExpr(if_expr.condition, indent + 1);
+            printExpr(if_expr.then_branch, indent + 1);
+            if (if_expr.else_branch) |else_expr| printExpr(else_expr, indent + 1);
+        },
     }
 }
 
@@ -77,11 +84,13 @@ pub fn main() !void {
     const input =
         \\let x = 5
         \\let y: float = 2.5
+        \\let forgotten: bool = true
         \\
-        \\let add = fn(a: int, b: float) -> float { return a + b }
+        \\let add = fn(a: int, b: float) -> float {
+        \\    a + b
+        \\}
         \\let z = add(x, y)
-        \\let a = return z
-        \\a
+        \\if z == 7.5 { true } else { false }
     ;
     std.debug.print("Input:\n{s}\n\n", .{input});
 
