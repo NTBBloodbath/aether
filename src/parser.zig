@@ -72,18 +72,25 @@ pub const Parser = struct {
     }
 
     pub fn parseExpression(self: *Parser) ParserError!*ast.Expression {
-        const left = try self.parsePrimary();
+        return self.parsePrecedence(0);
+    }
 
-        return switch (self.current_token.type) {
-            .Plus, .Minus, .Slash, .Star, .EqEq, .NotEq, .Less, .LessEq, .Greater, .GreaterEq => {
-                const op_token = self.current_token;
-                try self.advance();
-                const right = try self.parseExpression();
+    fn parsePrecedence(self: *Parser, min_precedence: u8) !*ast.Expression {
+        var left = try self.parsePrimary();
 
-                return ast.BinaryOp.create(self.allocator, left, op_token, right);
-            },
-            else => left,
-        };
+        while (true) {
+            const op_token = self.current_token;
+            const op_prec = self.getPrecedence();
+
+            // Stop if not an operator or precedence too low
+            if (op_prec == 0 or op_prec < min_precedence) break;
+
+            try self.advance();
+            const right = try self.parsePrecedence(op_prec + 1);
+            left = try ast.BinaryOp.create(self.allocator, left, op_token, right);
+        }
+
+        return left;
     }
 
     fn parseLambda(self: *Parser) !*ast.Expression {
@@ -173,7 +180,7 @@ pub const Parser = struct {
                 try self.advance();
                 return ast.BooleanLiteral.create(self.allocator, false);
             },
-            else => ParserError.UnexpectedToken,
+            else => return ParserError.UnexpectedToken,
         };
     }
 
@@ -246,6 +253,16 @@ pub const Parser = struct {
         }
 
         try self.advance();
+    }
+
+    fn getPrecedence(self: *Parser) u8 {
+        return switch (self.current_token.type) {
+            .Star, .Slash, .Modulus => 7,
+            .Plus, .Minus => 6,
+            .Less, .LessEq, .Greater, .GreaterEq => 5,
+            .EqEq, .NotEq => 4,
+            else => 0
+        };
     }
 
     fn isValidType(token_type: TokenType) !void {

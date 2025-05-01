@@ -82,14 +82,19 @@ fn printExpr(expr: *ast.Expression, indent: usize) void {
 
 pub fn main() !void {
     const input =
-        \\let factorial = fn(n: int) -> int {
-        \\    if n == 0 {
-        \\        1
-        \\    } else {
-        \\        n * factorial(n - 1)
-        \\    }
+        // \\let factorial = fn(n: int) -> int {
+        // \\    if n == 0 {
+        // \\        1
+        // \\    } else {
+        // \\        n * factorial(n - 1)
+        // \\    }
+        // \\}
+        // \\factorial(5)
+        \\let is_even = fn(n: int) -> bool {
+        \\    n % 2 == 0
         \\}
-        \\factorial(5)
+        \\is_even(4)
+        // \\(4 % 2) == 0
     ;
     std.debug.print("Input:\n{s}\n\n", .{input});
 

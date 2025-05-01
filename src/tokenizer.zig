@@ -7,6 +7,7 @@ pub const TokenType = enum {
     Minus,
     Slash,
     Star,
+    Modulus,
     Colon,
     Comma,
     Newline,
@@ -75,6 +76,7 @@ pub const Tokenizer = struct {
                 },
                 '*' => return self.singleToken(.Star),
                 '/' => return self.singleToken(.Slash),
+                '%' => return self.singleToken(.Modulus),
                 ':' => return self.singleToken(.Colon),
                 ',' => return self.singleToken(.Comma),
                 '=' => {
@@ -137,7 +139,10 @@ pub const Tokenizer = struct {
                     else
                         ident;
                 },
-                else => return error.InvalidCharacter,
+                else => {
+                    std.debug.print("Invalid character '{c}'\n", .{char});
+                    return error.InvalidCharacter;
+                },
             }
         }
 
@@ -169,7 +174,7 @@ pub const Tokenizer = struct {
         const start = self.position;
         while (self.position < self.source.len) : (self.position += 1) {
             const c = self.source[self.position];
-            if (!std.ascii.isAlphanumeric(c)) break;
+            if (!std.ascii.isAlphanumeric(c) and c != '_') break;
         }
 
         return .{
@@ -182,7 +187,7 @@ pub const Tokenizer = struct {
         if (self.position == 0) return false;
         const prev_char = self.source[self.position - 1];
         return switch (prev_char) {
-            '+', '-', '*', '/', '(', ')', ':' => true,
+            '+', '-', '*', '/', '%', '(', ')', ':' => true,
             else => false,
         };
     }

@@ -132,6 +132,14 @@ pub const VM = struct {
                         const rf = if (right == .Int) @as(f64, @floatFromInt(right.Int)) else right.Float;
                         break :blk Value{ .Float = lf * rf };
                     },
+                    .Modulus => blk: {
+                        if (left == .Int and right == .Int) {
+                            break :blk Value{ .Int = @rem(left.Int, right.Int) };
+                        }
+                        const lf = if (left == .Int) @as(f64, @floatFromInt(left.Int)) else left.Float;
+                        const rf = if (right == .Int) @as(f64, @floatFromInt(right.Int)) else right.Float;
+                        break :blk Value{ .Float = @rem(lf, rf) };
+                    },
                     .EqEq => compareValues(left, right, .eq),
                     .NotEq => compareValues(left, right, .neq),
                     .Less => compareValues(left, right, .lt),
