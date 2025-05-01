@@ -82,20 +82,23 @@ fn printExpr(expr: *ast.Expression, indent: usize) void {
 
 pub fn main() !void {
     const input =
-        \\let x = 5
-        \\let y: float = 2.5
-        \\let forgotten: bool = true
-        \\
-        \\let add = fn(a: int, b: float) -> float {
-        \\    a + b
+        \\let factorial = fn(n: int) -> int {
+        \\    if n == 0 {
+        \\        1
+        \\    } else {
+        \\        n * factorial(n - 1)
+        \\    }
         \\}
-        \\let z = add(x, y)
-        \\if z == 7.5 { true } else { false }
+        \\factorial(5)
     ;
     std.debug.print("Input:\n{s}\n\n", .{input});
 
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
     var tokenizer = Tokenizer{ .source = input };
-    var parser = try Parser.init(std.heap.page_allocator, &tokenizer);
+    var parser = try Parser.init(allocator, &tokenizer);
 
     const program = try parser.parseProgram();
     std.debug.print("Parsed AST:\n", .{});

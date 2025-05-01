@@ -143,7 +143,7 @@ pub const VM = struct {
                 try self.stack.append(result);
             },
             .VariableRef => |v| {
-                const value = self.env.values.get(v.name) orelse return error.UndefinedVariable;
+                const value = self.env.get(v.name) orelse return error.UndefinedVariable;
                 try self.stack.append(value);
             },
             .Lambda => |lambda| {
@@ -171,26 +171,17 @@ pub const VM = struct {
                 }
 
                 // Create nested environment for closure
-                const parent_env = self.env;
-                var call_env = std.StringHashMap(Value).init(self.allocator);
-
-                // Inherit from closure's environment
-                var iter = closure.env.values.iterator();
-                while (iter.next()) |entry| {
-                    try call_env.put(entry.key_ptr.*, entry.value_ptr.*);
-                }
+                const call_env = try Environment.create(self.allocator, closure.env);
 
                 // Bind parameters with shadowing
                 for (closure.lambda.params.items, args.items) |param, arg| {
-                    try call_env.put(param.name, arg);
+                    try call_env.values.put(param.name, arg);
                 }
 
                 // Execute in nested environment then restore current environment
-                self.env.values = try call_env.clone();
-                defer {
-                    self.env = parent_env;
-                    call_env.deinit();
-                }
+                const prev_env = self.env;
+                self.env = call_env;
+                defer self.env = prev_env;
 
                 // Evaluate function body
                 try self.eval_expr(closure.lambda.body);
