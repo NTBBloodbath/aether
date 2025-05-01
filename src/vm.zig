@@ -13,14 +13,15 @@ pub const Value = union(enum) {
     };
 
     // NOTE: unused atm, I no longer remember why I wrote this in first place
-    // pub fn format(self: Value, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-    //     _ = fmt;
-    //     _ = options;
-    //     switch (self) {
-    //         .Int => |v| try writer.print("{d}", .{v}),
-    //         .Float => |v| try writer.print("{d:.2}", .{v}),
-    //     }
-    // }
+    pub fn format(self: Value, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = fmt;
+        _ = options;
+        switch (self) {
+            .Int => |v| try writer.print("{d}", .{v}),
+            .Float => |v| try writer.print("{d:.2}", .{v}),
+            else => try writer.print("{any}", .{self}),
+        }
+    }
 };
 
 pub const Environment = struct {

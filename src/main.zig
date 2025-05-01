@@ -81,7 +81,7 @@ pub fn main() !void {
         \\let add = fn(a: int, b: float) -> float { return a + b }
         \\let z = add(x, y)
         \\let a = return z
-        \\return a
+        \\a
     ;
     std.debug.print("Input:\n{s}\n\n", .{input});
 
@@ -98,10 +98,18 @@ pub fn main() !void {
     for (program.statements.items) |stmt| {
         try vm.eval(stmt);
     }
+
     if (vm.stack.items.len < 1) {
         std.debug.print("\nOutput:\nNone\n", .{});
     } else {
-        std.debug.print("\nOutput:\n{any}\n", .{vm.stack.items[0]});
+        const stdout_file = std.io.getStdOut().writer();
+        var bw = std.io.bufferedWriter(stdout_file);
+        const stdout = bw.writer();
+
+        std.debug.print("\nOutput:\n", .{});
+        try vm.stack.items[0].format("", .{}, stdout);
+
+        try bw.flush(); // Don't forget to flush!
     }
 
     // stdout is for the actual output of your application, for example if you
