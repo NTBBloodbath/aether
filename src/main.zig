@@ -112,7 +112,7 @@ pub fn main() !void {
         \\    }
         \\}
         \\
-        \\factorial(5) |> add(5)
+        \\let a = factorial(5) |> add(5)
     ;
     std.debug.print("Input:\n{s}\n\n", .{input});
 

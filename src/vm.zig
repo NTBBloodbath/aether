@@ -84,7 +84,11 @@ pub const VM = struct {
                     if (!is_float and !is_int and !is_bool and !is_char and !is_str) return error.TypeMismatch;
                 }
 
-                try self.env.values.put(v.name, value);
+                const variable = try self.env.values.getOrPut(v.name);
+                if (variable.found_existing) {
+                    return error.Redeclaration;
+                }
+                variable.value_ptr.* = value;
             },
             .Expr => |e| try self.eval_expr(e),
             .FunctionDecl => |func| {
