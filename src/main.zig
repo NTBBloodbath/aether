@@ -100,13 +100,6 @@ fn printExpr(expr: *ast.Expression, indent: usize) void {
 
 pub fn main() !void {
     const input =
-        // \\fn greet(name: string) -> string {
-        // \\    "Hello, " + name
-        // \\}
-        // \\let greeting = greet("Vhyrro")
-        // \\greeting
-        // \\let c: char = 'c'
-        // \\c
         \\fn add(a: int, b: int) -> int {
         \\    a + b
         \\}
@@ -118,12 +111,8 @@ pub fn main() !void {
         \\        n * factorial(n - 1)
         \\    }
         \\}
-        \\add(factorial(5), 5)
-        // \\let is_even = fn(n: int) -> bool {
-        // \\    n % 2 == 0
-        // \\}
-        // \\is_even(4)
-        // \\(4 % 2) == 0
+        \\
+        \\factorial(5) |> add(5)
     ;
     std.debug.print("Input:\n{s}\n\n", .{input});
 

@@ -11,6 +11,7 @@ pub const TokenType = enum {
     Slash,
     Star,
     Modulus,
+    Pipe,
     Colon,
     Comma,
     Newline,
@@ -85,6 +86,13 @@ pub const Tokenizer = struct {
                 '%' => return self.singleToken(.Modulus),
                 ':' => return self.singleToken(.Colon),
                 ',' => return self.singleToken(.Comma),
+                '|' => {
+                    if (self.position + 1 < self.source.len and self.source[self.position + 1] == '>') {
+                        self.position += 2;
+                        return Token{ .type = .Pipe, .value = "|>" };
+                    }
+                    return error.InvalidCharacter;
+                },
                 '=' => {
                     if (self.position + 1 < self.source.len and self.source[self.position + 1] == '=') {
                         self.position += 2;

@@ -16,6 +16,7 @@ pub const ParserError = error{
     UnterminatedString, // Propagate tokenizer errors
     UnterminatedChar, // Propagate tokenizer errors
     ExpectedIdentifier,
+    PipeRightNotCallable,
     OutOfMemory,
 };
 
@@ -101,8 +102,34 @@ pub const Parser = struct {
             if (op_prec == 0 or op_prec < min_precedence) break;
 
             try self.advance();
-            const right = try self.parsePrecedence(op_prec + 1);
-            left = try ast.BinaryOp.create(self.allocator, left, op_token, right);
+
+            // Handle pipe operator
+            if (op_token.type == .Pipe) {
+                const right = try self.parsePrecedence(op_prec + 1);
+
+                // Transform pipe into function call
+                switch (right.*) {
+                    .FunctionCall => |func_call| {
+                        // Prepend left to arguments
+                        var new_args = std.ArrayList(*ast.Expression).init(self.allocator);
+                        try new_args.append(left);
+                        for (func_call.args.items) |arg| {
+                            try new_args.append(arg);
+                        }
+                        left = try ast.FunctionCall.create(self.allocator, func_call.callee, new_args);
+                    },
+                    .VariableRef => |_| {
+                        // Create new function call with left as first argument
+                        var args = std.ArrayList(*ast.Expression).init(self.allocator);
+                        try args.append(left);
+                        left = try ast.FunctionCall.create(self.allocator, right, args);
+                    },
+                    else => return error.PipeRightNotCallable,
+                }
+            } else {
+                const right = try self.parsePrecedence(op_prec + 1);
+                left = try ast.BinaryOp.create(self.allocator, left, op_token, right);
+            }
         }
 
         return left;
@@ -345,6 +372,7 @@ pub const Parser = struct {
             .Plus, .Minus => 6,
             .Less, .LessEq, .Greater, .GreaterEq => 5,
             .EqEq, .NotEq => 4,
+            .Pipe => 3,
             else => 0
         };
     }
