@@ -65,6 +65,9 @@ pub const ReturnStmt = struct {
 pub const Expression = union(enum) {
     NumberLiteral: *NumberLiteral,
     BooleanLiteral: *BooleanLiteral,
+    NilLiteral: *NilLiteral,
+    CharLiteral: *CharLiteral,
+    StringLiteral: *StringLiteral,
     BinaryOp: *BinaryOp,
     VariableRef: *VariableRef,
     Lambda: *Lambda,
@@ -79,6 +82,15 @@ pub const Expression = union(enum) {
             },
             .BooleanLiteral => |b| {
                 allocator.destroy(b);
+            },
+            .NilLiteral => |n| {
+                allocator.destroy(n);
+            },
+            .CharLiteral => |c| {
+                allocator.destroy(c);
+            },
+            .StringLiteral => |s| {
+                allocator.destroy(s);
             },
             .BinaryOp => |b| {
                 b.left.deinit(allocator);
@@ -201,6 +213,42 @@ pub const BooleanLiteral = struct {
 
         const expr = try allocator.create(Expression);
         expr.* = .{ .BooleanLiteral = node };
+        return expr;
+    }
+};
+
+pub const NilLiteral = struct {
+    pub fn create(allocator: std.mem.Allocator) !*Expression {
+        const node = try allocator.create(NilLiteral);
+
+        const expr = try allocator.create(Expression);
+        expr.* = .{ .NilLiteral = node };
+        return expr;
+    }
+};
+
+pub const CharLiteral = struct {
+    value: u21, // Unicode code point
+
+    pub fn create(allocator: std.mem.Allocator, value: u21) !*Expression {
+        const node = try allocator.create(CharLiteral);
+        node.* = .{ .value = value };
+
+        const expr = try allocator.create(Expression);
+        expr.* = .{ .CharLiteral = node };
+        return expr;
+    }
+};
+
+pub const StringLiteral = struct {
+    value: []const u8,
+
+    pub fn create(allocator: std.mem.Allocator, value: []const u8) !*Expression {
+        const node = try allocator.create(StringLiteral);
+        node.* = .{ .value = value };
+
+        const expr = try allocator.create(Expression);
+        expr.* = .{ .StringLiteral = node };
         return expr;
     }
 };

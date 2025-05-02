@@ -10,7 +10,11 @@ pub const ParserError = error{
     UnexpectedToken,
     SyntaxError,
     InvalidCharacter, // Propagate tokenizer errors
+    InvalidCharLiteral, // Propagate tokenizer errors
+    InvalidCharEscape,
     InvalidType,
+    UnterminatedString, // Propagate tokenizer errors
+    UnterminatedChar, // Propagate tokenizer errors
     ExpectedIdentifier,
     OutOfMemory,
 };
@@ -21,7 +25,12 @@ pub const Parser = struct {
     current_token: Token,
 
     pub fn init(allocator: std.mem.Allocator, tokenizer: *Tokenizer) ParserError!Parser {
-        const first_token = try tokenizer.next();
+        const first_token = tokenizer.next() catch |err| switch (err) {
+            error.UnterminatedString => return error.UnterminatedString,
+            error.UnterminatedChar => return error.UnterminatedChar,
+            error.InvalidCharLiteral => return error.InvalidCharLiteral,
+            error.InvalidCharacter => return error.InvalidCharacter,
+        };
 
         return Parser{
             .allocator = allocator,
@@ -78,7 +87,7 @@ pub const Parser = struct {
     }
 
     pub fn parseExpression(self: *Parser) ParserError!*ast.Expression {
-        return self.parsePrecedence(0);
+        return try self.parsePrecedence(0);
     }
 
     fn parsePrecedence(self: *Parser, min_precedence: u8) !*ast.Expression {
@@ -193,6 +202,16 @@ pub const Parser = struct {
                 try self.advance();
                 break :blk try ast.NumberLiteral.create(num_token.value, self.allocator);
             },
+            .Char => blk: {
+                const value = try parseCharValue(self.current_token.value);
+                try self.advance();
+                break :blk try ast.CharLiteral.create(self.allocator, value);
+            },
+            .String => blk: {
+                const value = self.current_token.value;
+                try self.advance();
+                break :blk try ast.StringLiteral.create(self.allocator, value);
+            },
             .LParen => blk: {
                 try self.advance();
                 const expr = try self.parseExpression();
@@ -213,15 +232,39 @@ pub const Parser = struct {
             .KeywordFn => try self.parseLambda(),
             .KeywordReturn => try self.parseReturn(),
             .KeywordIf => try self.parseIfExpr(),
-            .KeywordTrue =>{
+            .KeywordTrue => {
                 try self.advance();
                 return ast.BooleanLiteral.create(self.allocator, true);
             },
-            .KeywordFalse =>{
+            .KeywordFalse => {
                 try self.advance();
                 return ast.BooleanLiteral.create(self.allocator, false);
             },
+            .KeywordNil => {
+                try self.advance();
+                return ast.NilLiteral.create(self.allocator);
+            },
             else => return ParserError.UnexpectedToken,
+        };
+    }
+
+    fn parseCharValue(str: []const u8) !u21 {
+        // Handle escaped characters
+        if (str[0] == '\\') {
+            return switch (str[1]) {
+                'n' => '\n',
+                't' => '\t',
+                'r' => '\r',
+                '0' => 0,
+                '\\' => '\\',
+                '\'' => '\'',
+                '"' => '"',
+                else => return error.InvalidCharEscape,
+            };
+        }
+        return std.unicode.utf8Decode(str) catch {
+            std.debug.print("Invalid char literal: {s}\n", .{str});
+            return 0xFFFD; // Unicode replacement character
         };
     }
 
@@ -307,7 +350,7 @@ pub const Parser = struct {
     }
 
     fn isValidType(token_type: TokenType) !void {
-        if (token_type != .TypeInt and token_type != .TypeFloat and token_type != .TypeBool) {
+        if (token_type != .TypeInt and token_type != .TypeFloat and token_type != .TypeBool and token_type != .TypeChar and token_type != .TypeString) {
             return ParserError.InvalidType;
         }
     }

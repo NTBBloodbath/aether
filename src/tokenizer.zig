@@ -3,6 +3,9 @@ const std = @import("std");
 pub const TokenType = enum {
     Identifier,
     Number,
+    Boolean,
+    String,
+    Char,
     Plus,
     Minus,
     Slash,
@@ -18,9 +21,12 @@ pub const TokenType = enum {
     KeywordElse,
     KeywordTrue,
     KeywordFalse,
+    KeywordNil,
     TypeInt,
     TypeFloat,
     TypeBool,
+    TypeChar,
+    TypeString,
     Eq,
     EqEq,
     NotEq,
@@ -113,11 +119,13 @@ pub const Tokenizer = struct {
                 ')' => return self.singleToken(.RParen),
                 '{' => return self.singleToken(.LBrace),
                 '}' => return self.singleToken(.RBrace),
+                '"' => return try self.parseString(),
+                '\'' => return try self.parseChar(),
                 '0'...'9' => return self.parseNumber(),
                 'a'...'z', 'A'...'Z' => {
                     const ident = self.parseIdentifier();
                     return if (std.mem.eql(u8, ident.value, "if"))
-                        Token{ .type = .KeywordIf, .value = "if"}
+                        Token{ .type = .KeywordIf, .value = "if" }
                     else if (std.mem.eql(u8, ident.value, "else"))
                         Token{ .type = .KeywordElse, .value = "else" }
                     else if (std.mem.eql(u8, ident.value, "let"))
@@ -126,16 +134,22 @@ pub const Tokenizer = struct {
                         Token{ .type = .KeywordFn, .value = "fn" }
                     else if (std.mem.eql(u8, ident.value, "return"))
                         Token{ .type = .KeywordReturn, .value = "return" }
-                    else if (std.mem.eql(u8, ident.value, "int"))
-                        Token{ .type = .TypeInt, .value = "int" }
-                    else if (std.mem.eql(u8, ident.value, "float"))
-                        Token{ .type = .TypeFloat, .value = "float" }
                     else if (std.mem.eql(u8, ident.value, "true"))
                         Token{ .type = .KeywordTrue, .value = "true" }
                     else if (std.mem.eql(u8, ident.value, "false"))
                         Token{ .type = .KeywordFalse, .value = "false" }
+                    else if (std.mem.eql(u8, ident.value, "nil"))
+                        Token{ .type = .KeywordNil, .value = "nil" }
+                    else if (std.mem.eql(u8, ident.value, "int"))
+                        Token{ .type = .TypeInt, .value = "int" }
+                    else if (std.mem.eql(u8, ident.value, "float"))
+                        Token{ .type = .TypeFloat, .value = "float" }
                     else if (std.mem.eql(u8, ident.value, "bool"))
                         Token{ .type = .TypeBool, .value = "bool" }
+                    else if (std.mem.eql(u8, ident.value, "char"))
+                        Token{ .type = .TypeChar, .value = "char" }
+                    else if (std.mem.eql(u8, ident.value, "string"))
+                        Token{ .type = .TypeString, .value = "string" }
                     else
                         ident;
                 },
@@ -168,6 +182,60 @@ pub const Tokenizer = struct {
             .type = .Number,
             .value = self.source[start..self.position],
         };
+    }
+
+    fn parseChar(self: *Tokenizer) !Token {
+        self.position += 1; // Skip opening '
+        const start = self.position;
+
+        if (self.position >= self.source.len) return error.UnterminatedChar;
+
+        if (self.source[self.position] == '\\') {
+            self.position += 1;
+            if (self.position >= self.source.len) return error.UnterminatedChar;
+        }
+
+        const char_len = std.unicode.utf8ByteSequenceLength(self.source[self.position]) catch 1;
+        self.position += char_len;
+
+        if (self.position >= self.source.len or self.source[self.position] != '\'') {
+            return error.InvalidCharLiteral;
+        }
+
+        const value = self.source[start..self.position];
+        self.position += 1;
+
+        return Token{ .type = .Char, .value = value };
+    }
+
+    fn parseString(self: *Tokenizer) !Token {
+        self.position += 1; // Skip opening "
+        const start = self.position;
+        var escape = false;
+
+        while (self.position < self.source.len) : (self.position += 1) {
+            const c = self.source[self.position];
+
+            if (escape) {
+                escape = false;
+                self.position += 1;
+                continue;
+            }
+
+            if (c == '\\') {
+                escape = true;
+                self.position += 1;
+                continue;
+            }
+
+            if (c == '"') {
+                const value = self.source[start..self.position];
+                self.position += 1; // Skip closing "
+                return Token{ .type = .String, .value = value };
+            }
+        }
+
+        return error.UnterminatedString;
     }
 
     fn parseIdentifier(self: *Tokenizer) Token {

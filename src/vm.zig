@@ -6,6 +6,9 @@ pub const Value = union(enum) {
     Int: i64,
     Float: f64,
     Bool: bool,
+    Nil,
+    Char: u21,
+    String: []const u8,
     Function: *Closure,
 
     pub const Closure = struct {
@@ -21,6 +24,13 @@ pub const Value = union(enum) {
             .Int => |v| try writer.print("{d}", .{v}),
             .Float => |v| try writer.print("{d:.2}", .{v}),
             .Bool => |v| try writer.print("{s}", .{if (v) "true" else "false"}),
+            .Nil => try writer.writeAll("nil"),
+            .Char => |v| {
+                var buf: [4]u8 = undefined;
+                const len = try std.unicode.utf8Encode(v, &buf);
+                try writer.print("'{s}'", .{std.unicode.fmtUtf8(buf[0..len])});
+            },
+            .String => |v| try writer.print("\"{s}\"", .{v}),
             else => try writer.print("{any}", .{self}),
         }
     }
@@ -69,7 +79,9 @@ pub const VM = struct {
                     const is_float = std.mem.eql(u8, t, "float") and value == .Float;
                     const is_int = std.mem.eql(u8, t, "int") and value == .Int;
                     const is_bool = std.mem.eql(u8, t, "bool") and value == .Bool;
-                    if (!is_float and !is_int and !is_bool) return error.TypeMismatch;
+                    const is_char = std.mem.eql(u8, t, "char") and value == .Char;
+                    const is_str = std.mem.eql(u8, t, "string") and value == .String;
+                    if (!is_float and !is_int and !is_bool and !is_char and !is_str) return error.TypeMismatch;
                 }
 
                 try self.env.values.put(v.name, value);
@@ -113,6 +125,18 @@ pub const VM = struct {
                 const value = try inferType(bool_type);
                 try self.stack.append(value);
             },
+            .NilLiteral => {
+                try self.stack.append(.Nil);
+            },
+            .CharLiteral => |c| {
+                // var buf: [4]u8 = undefined;
+                // const len = try std.unicode.utf8Encode(c.value, &buf);
+                // const value = try inferType(buf[0..len]);
+                try self.stack.append(.{ .Char = c.value });
+            },
+            .StringLiteral => |s| {
+                try self.stack.append(.{ .String = s.value });
+            },
             .BinaryOp => |b| {
                 try self.eval_expr(b.left);
                 try self.eval_expr(b.right);
@@ -120,6 +144,12 @@ pub const VM = struct {
                 const left = self.stack.pop().?;
                 const result = switch (b.op.type) {
                     .Plus => blk: {
+                        // Concatenate Strings
+                        // TODO: make use of a separate operator later for this to avoid ambiguity?
+                        if (left == .String and right == .String) {
+                            const new_str = try std.fmt.allocPrint(self.allocator, "{s}{s}", .{ left.String, right.String });
+                            break :blk Value{ .String = new_str };
+                        }
                         if (left == .Int and right == .Int) {
                             break :blk Value{ .Int = left.Int + right.Int };
                         }
@@ -247,22 +277,22 @@ pub const VM = struct {
     }
 
     fn inferType(value: []const u8) !Value {
-        if (std.ascii.isDigit(value[0])) {
-            // Numbers
+        // Handle boolean and nil literals
+        if (std.mem.eql(u8, value, "true")) return .{ .Bool = true };
+        if (std.mem.eql(u8, value, "false")) return .{ .Bool = false };
+        if (std.mem.eql(u8, value, "nil")) return .Nil;
+
+        // Handle numbers
+        if (std.ascii.isDigit(value[0]) or value[0] == '-' or value[0] == '+') {
             if (std.mem.indexOf(u8, value, ".")) |_| {
                 return .{ .Float = try std.fmt.parseFloat(f64, value) };
             } else {
                 return .{ .Int = try std.fmt.parseInt(i64, value, 10) };
             }
-        } else {
-            // Boolean
-            if (std.mem.eql(u8, value, "true")) {
-                return .{ .Bool = true };
-            } else if (std.mem.eql(u8, value, "false")) {
-                return .{ .Bool = false };
-            }
-            return error.CannotInferType;
         }
+
+        // Should never reach here for valid literals (or so I hope)
+        return error.CannotInferType;
     }
 
     fn getTypeName(val: Value) []const u8 {
@@ -270,6 +300,9 @@ pub const VM = struct {
             .Int => "int",
             .Float => "float",
             .Bool => "bool",
+            .Nil => "nil",
+            .Char => "char",
+            .String => "string",
             .Function => "function",
         };
     }

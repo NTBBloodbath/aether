@@ -52,6 +52,13 @@ fn printExpr(expr: *ast.Expression, indent: usize) void {
     switch (expr.*) {
         .NumberLiteral => |n| std.debug.print("Number({s})\n", .{n.value}),
         .BooleanLiteral => |b| std.debug.print("Boolean({any})\n", .{b.value}),
+        .NilLiteral => std.debug.print("Nil(nil)\n", .{}),
+        .CharLiteral => |c| {
+            var buf: [4]u8 = undefined;
+            const len = std.unicode.utf8Encode(c.value, &buf) catch return;
+            std.debug.print("Char('{s}')\n", .{buf[0..len]});
+        },
+        .StringLiteral => |s| std.debug.print("String(\"{s}\")\n", .{s.value}),
         .BinaryOp => |b| {
             std.debug.print("BinaryOp({s})\n", .{b.op.value});
             printExpr(b.left, indent + 1);
@@ -93,6 +100,17 @@ fn printExpr(expr: *ast.Expression, indent: usize) void {
 
 pub fn main() !void {
     const input =
+        // \\fn greet(name: string) -> string {
+        // \\    "Hello, " + name
+        // \\}
+        // \\let greeting = greet("Vhyrro")
+        // \\greeting
+        // \\let c: char = 'c'
+        // \\c
+        \\fn add(a: int, b: int) -> int {
+        \\    a + b
+        \\}
+        \\
         \\fn factorial(n: int) -> int {
         \\    if n == 0 {
         \\        1
@@ -100,7 +118,7 @@ pub fn main() !void {
         \\        n * factorial(n - 1)
         \\    }
         \\}
-        \\factorial(5)
+        \\add(factorial(5), 5)
         // \\let is_even = fn(n: int) -> bool {
         // \\    n % 2 == 0
         // \\}
@@ -136,6 +154,7 @@ pub fn main() !void {
 
         std.debug.print("\nOutput:\n", .{});
         try vm.stack.items[0].format("", .{}, stdout);
+        try stdout.writeAll("\n");
 
         try bw.flush(); // Don't forget to flush!
     }
