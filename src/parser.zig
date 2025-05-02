@@ -143,10 +143,14 @@ pub const Parser = struct {
         var params = std.ArrayList(ast.Param).init(self.allocator);
         while (self.current_token.type != .RParen) {
             const name = try self.parseIdentifier();
-            try self.expect(.Colon);
-            const param_type = self.current_token.type;
-            const type_name = self.current_token.value;
-            try isValidType(param_type);
+
+            var type_name: ?[]const u8 = null;
+            if (self.current_token.type == .Colon) {
+                try self.advance();
+                try isValidType(self.current_token.type);
+                type_name = self.current_token.value;
+                try self.advance();
+            }
             try self.advance();
 
             try params.append(.{ .name = name.value, .type_name = type_name });
@@ -180,10 +184,14 @@ pub const Parser = struct {
         var params = std.ArrayList(ast.Param).init(self.allocator);
         while (self.current_token.type != .RParen) {
             const param_name = try self.parseIdentifier();
-            try self.expect(.Colon);
-            const param_type = self.current_token.value;
-            try isValidType(self.current_token.type);
-            try self.advance();
+
+            var param_type: ?[]const u8 = null;
+            if (self.current_token.type == .Colon) {
+                try self.advance();
+                try isValidType(self.current_token.type);
+                param_type = self.current_token.value;
+                try self.advance();
+            }
 
             try params.append(.{ .name = param_name.value, .type_name = param_type });
 
@@ -360,6 +368,7 @@ pub const Parser = struct {
 
     fn expect(self: *Parser, expected: TokenType) !void {
         if (self.current_token.type != expected) {
+            // TODO: convert the token types into their value equivalent for better errors
             // zig fmt: off
             std.debug.print(
                 "Error at line {d}, column {d} - Expected '{s}', found '{s}'\n",

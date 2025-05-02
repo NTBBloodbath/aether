@@ -311,9 +311,11 @@ pub const VM = struct {
         };
     }
 
-    fn checkType(expected: []const u8, actual: Value) !void {
-        if (!std.mem.eql(u8, expected, getTypeName(actual))) {
-            return error.TypeMismatch;
+    fn checkType(expected: ?[]const u8, actual: Value) !void {
+        if (expected) |exp| {
+            if (!std.mem.eql(u8, exp, getTypeName(actual))) {
+                return error.TypeMismatch;
+            }
         }
     }
 

@@ -143,7 +143,7 @@ pub const IfExpr = struct {
 
 pub const Param = struct {
     name: []const u8,
-    type_name: []const u8,
+    type_name: ?[]const u8,
 };
 
 pub const Lambda = struct {

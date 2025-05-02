@@ -35,7 +35,8 @@ fn printStatement(stmt: *ast.Statement, indent: usize) void {
                 while (j < indent + 1) : (j += 1) {
                     std.debug.print("  ", .{});
                 }
-                std.debug.print("Param({s}, {s})\n", .{param.name, param.type_name});
+                const param_type = if (param.type_name == null) "inferred" else param.type_name.?;
+                std.debug.print("Param({s}, {s})\n", .{param.name, param_type});
             }
         },
         .Return => |ret| printExpr(ret.value, indent),
@@ -75,7 +76,8 @@ fn printExpr(expr: *ast.Expression, indent: usize) void {
                 while (j < indent + 1) : (j += 1) {
                     std.debug.print("  ", .{});
                 }
-                std.debug.print("Param({s}, {s})\n", .{param.name, param.type_name});
+                const param_type = if (param.type_name == null) "inferred" else param.type_name.?;
+                std.debug.print("Param({s}, {s})\n", .{param.name, param_type});
             }
         },
         .FunctionCall => |call| {
@@ -104,7 +106,7 @@ pub fn main() !void {
         \\    a + b
         \\}
         \\
-        \\fn factorial(n: int) -> int {
+        \\fn factorial(n) -> int {
         \\    if n == 0 {
         \\        1
         \\    } else {
