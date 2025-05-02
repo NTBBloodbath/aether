@@ -62,6 +62,12 @@ pub const Parser = struct {
                 stmt.* = .{ .Return = ret };
                 break :blk stmt;
             },
+            .KeywordFn => blk: {
+                const func_decl = try self.parseFunctionDecl();
+                const stmt = try self.allocator.create(ast.Statement);
+                stmt.* = .{ .FunctionDecl = func_decl };
+                break :blk stmt;
+            },
             else => blk: {
                 const expr = try self.parseExpression();
                 const stmt = try self.allocator.create(ast.Statement);
@@ -127,6 +133,41 @@ pub const Parser = struct {
         try self.expect(.RBrace);
 
         return ast.Lambda.create(self.allocator, params, return_type_name, body);
+    }
+
+    fn parseFunctionDecl(self:*Parser) !*ast.FunctionDecl {
+        try self.expect(.KeywordFn);
+        const name = try self.parseIdentifier();
+
+        // Parameters
+        try self.expect(.LParen);
+        var params = std.ArrayList(ast.Param).init(self.allocator);
+        while (self.current_token.type != .RParen) {
+            const param_name = try self.parseIdentifier();
+            try self.expect(.Colon);
+            const param_type = self.current_token.value;
+            try isValidType(self.current_token.type);
+            try self.advance();
+
+            try params.append(.{ .name = param_name.value, .type_name = param_type });
+
+            if (self.current_token.type == .Comma) try self.advance() else break;
+        }
+        try self.expect(.RParen);
+
+        // Return type
+        try self.expect(.Arrow);
+        const return_type = self.current_token.value;
+        try isValidType(self.current_token.type);
+        try self.advance();
+
+        // Body
+        try self.expect(.LBrace);
+        const body = try self.parseExpression();
+        try self.expect(.RBrace);
+
+        const func_decl = try ast.FunctionDecl.create(self.allocator, name.value, params, return_type, body);
+        return func_decl.FunctionDecl;
     }
 
     fn parseFunctionCall(self: *Parser, callee: *ast.Expression) !*ast.Expression {

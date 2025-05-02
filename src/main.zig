@@ -27,6 +27,17 @@ fn printStatement(stmt: *ast.Statement, indent: usize) void {
             printExpr(decl.value, indent + 1);
         },
         .Expr => |e| printExpr(e, indent),
+        .FunctionDecl => |f| {
+            std.debug.print("FunctionDecl({s}, {s})\n", .{f.name, f.return_type});
+            printExpr(f.body, indent + 1);
+            for (f.params.items) |param| {
+                var j: usize = 0;
+                while (j < indent + 1) : (j += 1) {
+                    std.debug.print("  ", .{});
+                }
+                std.debug.print("Param({s}, {s})\n", .{param.name, param.type_name});
+            }
+        },
         .Return => |ret| printExpr(ret.value, indent),
     }
 }
@@ -82,18 +93,18 @@ fn printExpr(expr: *ast.Expression, indent: usize) void {
 
 pub fn main() !void {
     const input =
-        // \\let factorial = fn(n: int) -> int {
-        // \\    if n == 0 {
-        // \\        1
-        // \\    } else {
-        // \\        n * factorial(n - 1)
-        // \\    }
-        // \\}
-        // \\factorial(5)
-        \\let is_even = fn(n: int) -> bool {
-        \\    n % 2 == 0
+        \\fn factorial(n: int) -> int {
+        \\    if n == 0 {
+        \\        1
+        \\    } else {
+        \\        n * factorial(n - 1)
+        \\    }
         \\}
-        \\is_even(4)
+        \\factorial(5)
+        // \\let is_even = fn(n: int) -> bool {
+        // \\    n % 2 == 0
+        // \\}
+        // \\is_even(4)
         // \\(4 % 2) == 0
     ;
     std.debug.print("Input:\n{s}\n\n", .{input});

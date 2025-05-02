@@ -25,6 +25,7 @@ pub const Program = struct {
 pub const Statement = union(enum) {
     VariableDecl: *VariableDecl,
     Expr: *Expression,
+    FunctionDecl: *FunctionDecl,
     Return: *ReturnStmt,
 
     pub fn deinit(self: *Statement, allocator: std.mem.Allocator) void {
@@ -34,6 +35,11 @@ pub const Statement = union(enum) {
                 allocator.destroy(v);
             },
             .Expr => |expr| expr.deinit(allocator),
+            .FunctionDecl => |func| {
+                func.params.deinit();
+                func.body.deinit(allocator);
+                allocator.destroy(func);
+            },
             .Return => |ret| {
                 ret.value.deinit(allocator);
                 allocator.destroy(ret);
@@ -83,8 +89,8 @@ pub const Expression = union(enum) {
                 allocator.destroy(v);
             },
             .Lambda => |l| {
-                l.body.deinit(allocator);
                 l.params.deinit();
+                l.body.deinit(allocator);
                 allocator.destroy(l);
             },
             .FunctionCall => |f| {
@@ -140,6 +146,22 @@ pub const Lambda = struct {
         const expr = try allocator.create(Expression);
         expr.* = .{ .Lambda = node };
         return expr;
+    }
+};
+
+pub const FunctionDecl = struct {
+    name: []const u8,
+    params: std.ArrayList(Param),
+    return_type: []const u8,
+    body: *Expression,
+
+    pub fn create(allocator: std.mem.Allocator, name: []const u8, params: std.ArrayList(Param), return_type: []const u8, body: *Expression) !*Statement {
+        const node = try allocator.create(FunctionDecl);
+        node.* = .{ .name = name, .params = params, .return_type = return_type, .body = body };
+
+        const stmt = try allocator.create(Statement);
+        stmt.* = .{ .FunctionDecl = node };
+        return stmt;
     }
 };
 

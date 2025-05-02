@@ -75,6 +75,25 @@ pub const VM = struct {
                 try self.env.values.put(v.name, value);
             },
             .Expr => |e| try self.eval_expr(e),
+            .FunctionDecl => |func| {
+                const closure_env = try Environment.create(self.allocator, self.env);
+
+                const lambda = try self.allocator.create(ast.Lambda);
+                lambda.* = .{
+                    .params = func.params,
+                    .return_type = func.return_type,
+                    .body = func.body,
+                };
+
+                const closure = try self.allocator.create(Value.Closure);
+                closure.* = .{
+                    .lambda = lambda,
+                    .env = closure_env,
+                };
+
+                try closure_env.values.put(func.name, .{ .Function = closure });
+                try self.env.values.put(func.name, .{ .Function = closure });
+            },
             .Return => |ret| try self.eval_expr(ret.value),
         }
     }
