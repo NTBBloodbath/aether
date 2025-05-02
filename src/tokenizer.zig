@@ -46,22 +46,29 @@ pub const TokenType = enum {
 pub const Token = struct {
     type: TokenType,
     value: []const u8,
+    line: u32,
+    column: u32
 };
 
 pub const Tokenizer = struct {
     source: []const u8,
     position: usize = 0,
+    line: u32 = 1,
+    column: u32 = 1,
 
     pub fn next(self: *Tokenizer) !Token {
         while (self.position < self.source.len) {
             const char = self.source[self.position];
             switch (char) {
                 ' ', '\t' => {
+                    self.column += 1;
                     self.position += 1; // Skip whitespace
                     continue;
                 },
                 // Skip newlines ONLY if they are not part of an expression
                 '\n' => {
+                    self.line += 1;
+                    self.column = 1;
                     self.position += 1;
                     if (self.isMidExpression()) {
                         // Treat newline as whitespace
@@ -69,15 +76,16 @@ pub const Tokenizer = struct {
                     } else {
                         // Only return newline as statement separator if previous token wasn't newline
                         if (self.position == 0 or self.source[self.position - 1] != '\n')
-                            return Token{ .type = .Newline, .value = "\n" };
+                            return Token{ .type = .Newline, .value = "\n", .line = self.line, .column = self.column };
                     }
                 },
                 '+' => return self.singleToken(.Plus),
                 '-' => {
                     // Check for arrow
                     if (self.position + 1 < self.source.len and self.source[self.position + 1] == '>') {
+                        self.column += 2;
                         self.position += 2;
-                        return Token{ .type = .Arrow, .value = "->" };
+                        return Token{ .type = .Arrow, .value = "->", .line = self.line, .column = self.column };
                     }
                     return self.singleToken(.Minus);
                 },
@@ -88,36 +96,41 @@ pub const Tokenizer = struct {
                 ',' => return self.singleToken(.Comma),
                 '|' => {
                     if (self.position + 1 < self.source.len and self.source[self.position + 1] == '>') {
+                        self.column += 2;
                         self.position += 2;
-                        return Token{ .type = .Pipe, .value = "|>" };
+                        return Token{ .type = .Pipe, .value = "|>", .line = self.line, .column = self.column };
                     }
                     return error.InvalidCharacter;
                 },
                 '=' => {
                     if (self.position + 1 < self.source.len and self.source[self.position + 1] == '=') {
+                        self.column += 2;
                         self.position += 2;
-                        return Token{ .type = .EqEq, .value = "==" };
+                        return Token{ .type = .EqEq, .value = "==", .line = self.line, .column = self.column };
                     }
                     return self.singleToken(.Eq);
                 },
                 '<' => {
                     if (self.position + 1 < self.source.len and self.source[self.position + 1] == '=') {
+                        self.column += 2;
                         self.position += 2;
-                        return Token{ .type = .LessEq, .value = "<=" };
+                        return Token{ .type = .LessEq, .value = "<=", .line = self.line, .column = self.column };
                     }
                     return self.singleToken(.Less);
                 },
                 '>' => {
                     if (self.position + 1 < self.source.len and self.source[self.position + 1] == '=') {
+                        self.column += 2;
                         self.position += 2;
-                        return Token{ .type = .GreaterEq, .value = ">=" };
+                        return Token{ .type = .GreaterEq, .value = ">=", .line = self.line, .column = self.column };
                     }
                     return self.singleToken(.Greater);
                 },
                 '!' => {
                     if (self.position + 1 < self.source.len and self.source[self.position + 1] == '=') {
+                        self.column += 2;
                         self.position += 2;
-                        return Token{ .type = .NotEq, .value = "!=" };
+                        return Token{ .type = .NotEq, .value = "!=", .line = self.line, .column = self.column };
                     }
                     // TODO: handle this case as a boolean condition checker
                     // return self.singleToken(.Not);
@@ -133,49 +146,50 @@ pub const Tokenizer = struct {
                 'a'...'z', 'A'...'Z' => {
                     const ident = self.parseIdentifier();
                     return if (std.mem.eql(u8, ident.value, "if"))
-                        Token{ .type = .KeywordIf, .value = "if" }
+                        Token{ .type = .KeywordIf, .value = "if", .line = self.line, .column = self.column }
                     else if (std.mem.eql(u8, ident.value, "else"))
-                        Token{ .type = .KeywordElse, .value = "else" }
+                        Token{ .type = .KeywordElse, .value = "else", .line = self.line, .column = self.column }
                     else if (std.mem.eql(u8, ident.value, "let"))
-                        Token{ .type = .KeywordLet, .value = "let" }
+                        Token{ .type = .KeywordLet, .value = "let", .line = self.line, .column = self.column }
                     else if (std.mem.eql(u8, ident.value, "fn"))
-                        Token{ .type = .KeywordFn, .value = "fn" }
+                        Token{ .type = .KeywordFn, .value = "fn", .line = self.line, .column = self.column }
                     else if (std.mem.eql(u8, ident.value, "return"))
-                        Token{ .type = .KeywordReturn, .value = "return" }
+                        Token{ .type = .KeywordReturn, .value = "return", .line = self.line, .column = self.column }
                     else if (std.mem.eql(u8, ident.value, "true"))
-                        Token{ .type = .KeywordTrue, .value = "true" }
+                        Token{ .type = .KeywordTrue, .value = "true", .line = self.line, .column = self.column }
                     else if (std.mem.eql(u8, ident.value, "false"))
-                        Token{ .type = .KeywordFalse, .value = "false" }
+                        Token{ .type = .KeywordFalse, .value = "false", .line = self.line, .column = self.column }
                     else if (std.mem.eql(u8, ident.value, "nil"))
-                        Token{ .type = .KeywordNil, .value = "nil" }
+                        Token{ .type = .KeywordNil, .value = "nil", .line = self.line, .column = self.column }
                     else if (std.mem.eql(u8, ident.value, "int"))
-                        Token{ .type = .TypeInt, .value = "int" }
+                        Token{ .type = .TypeInt, .value = "int", .line = self.line, .column = self.column }
                     else if (std.mem.eql(u8, ident.value, "float"))
-                        Token{ .type = .TypeFloat, .value = "float" }
+                        Token{ .type = .TypeFloat, .value = "float", .line = self.line, .column = self.column }
                     else if (std.mem.eql(u8, ident.value, "bool"))
-                        Token{ .type = .TypeBool, .value = "bool" }
+                        Token{ .type = .TypeBool, .value = "bool", .line = self.line, .column = self.column }
                     else if (std.mem.eql(u8, ident.value, "char"))
-                        Token{ .type = .TypeChar, .value = "char" }
+                        Token{ .type = .TypeChar, .value = "char", .line = self.line, .column = self.column }
                     else if (std.mem.eql(u8, ident.value, "string"))
-                        Token{ .type = .TypeString, .value = "string" }
+                        Token{ .type = .TypeString, .value = "string", .line = self.line, .column = self.column }
                     else
                         ident;
                 },
                 else => {
-                    std.debug.print("Invalid character '{c}'\n", .{char});
+                    std.debug.print("Error at line {d}, column {d} - Invalid character '{c}'\n", .{self.line, self.column, char});
                     return error.InvalidCharacter;
                 },
             }
         }
 
-        return Token{ .type = .Eof, .value = "" };
+        return Token{ .type = .Eof, .value = "", .line = self.line, .column = self.column };
     }
 
     fn singleToken(self: *Tokenizer, t_type: TokenType) Token {
         const value = self.source[self.position .. self.position + 1];
+        self.column += 1;
         self.position += 1;
 
-        return .{ .type = t_type, .value = value };
+        return .{ .type = t_type, .value = value, .line = self.line, .column = self.column };
     }
 
     // Parse multi-digit numbers
@@ -184,21 +198,26 @@ pub const Tokenizer = struct {
         while (self.position < self.source.len) : (self.position += 1) {
             const c = self.source[self.position];
             if (!std.ascii.isDigit(c) and c != '.') break;
+            self.column += 1;
         }
 
         return .{
             .type = .Number,
             .value = self.source[start..self.position],
+            .line = self.line,
+            .column = self.column,
         };
     }
 
     fn parseChar(self: *Tokenizer) !Token {
+        self.column += 1;
         self.position += 1; // Skip opening '
         const start = self.position;
 
         if (self.position >= self.source.len) return error.UnterminatedChar;
 
         if (self.source[self.position] == '\\') {
+            self.column += 1;
             self.position += 1;
             if (self.position >= self.source.len) return error.UnterminatedChar;
         }
@@ -211,12 +230,14 @@ pub const Tokenizer = struct {
         }
 
         const value = self.source[start..self.position];
+        self.column += 1;
         self.position += 1;
 
-        return Token{ .type = .Char, .value = value };
+        return Token{ .type = .Char, .value = value, .line = self.line, .column = self.column };
     }
 
     fn parseString(self: *Tokenizer) !Token {
+        self.column += 1;
         self.position += 1; // Skip opening "
         const start = self.position;
         var escape = false;
@@ -226,21 +247,26 @@ pub const Tokenizer = struct {
 
             if (escape) {
                 escape = false;
+                self.column += 1;
                 self.position += 1;
                 continue;
             }
 
             if (c == '\\') {
                 escape = true;
+                self.column += 1;
                 self.position += 1;
                 continue;
             }
 
             if (c == '"') {
                 const value = self.source[start..self.position];
+                self.column += 1;
                 self.position += 1; // Skip closing "
-                return Token{ .type = .String, .value = value };
+                return Token{ .type = .String, .value = value, .line = self.line, .column = self.column };
             }
+
+            self.column += 1;
         }
 
         return error.UnterminatedString;
@@ -251,11 +277,14 @@ pub const Tokenizer = struct {
         while (self.position < self.source.len) : (self.position += 1) {
             const c = self.source[self.position];
             if (!std.ascii.isAlphanumeric(c) and c != '_') break;
+            self.column += 1;
         }
 
         return .{
             .type = .Identifier,
             .value = self.source[start..self.position],
+            .line = self.line,
+            .column = self.column,
         };
     }
 

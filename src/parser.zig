@@ -171,7 +171,7 @@ pub const Parser = struct {
         return ast.Lambda.create(self.allocator, params, return_type_name, body);
     }
 
-    fn parseFunctionDecl(self:*Parser) !*ast.FunctionDecl {
+    fn parseFunctionDecl(self: *Parser) !*ast.FunctionDecl {
         try self.expect(.KeywordFn);
         const name = try self.parseIdentifier();
 
@@ -360,6 +360,16 @@ pub const Parser = struct {
 
     fn expect(self: *Parser, expected: TokenType) !void {
         if (self.current_token.type != expected) {
+            // zig fmt: off
+            std.debug.print(
+                "Error at line {d}, column {d} - Expected '{s}', found '{s}'\n",
+                .{
+                    self.current_token.line,
+                    self.current_token.column,
+                    @tagName(expected),
+                    @tagName(self.current_token.type)
+                }
+            );
             return ParserError.SyntaxError;
         }
 
@@ -373,7 +383,7 @@ pub const Parser = struct {
             .Less, .LessEq, .Greater, .GreaterEq => 5,
             .EqEq, .NotEq => 4,
             .Pipe => 3,
-            else => 0
+            else => 0,
         };
     }
 
