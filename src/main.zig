@@ -106,17 +106,15 @@ pub fn main() !void {
         \\    a + b
         \\}
         \\
-        \\let a: float = add(5, 3)
-        // \\
-        // \\fn factorial(n) int {
-        // \\    if n == 0 {
-        // \\        1
-        // \\    } else {
-        // \\        n * factorial(n - 1)
-        // \\    }
-        // \\}
-        // \\
-        // \\factorial(5) |> add(5)
+        \\fn factorial(n) -> int {
+        \\    if n == 0 {
+        \\        1
+        \\    } else {
+        \\        n * factorial(n - 1)
+        \\    }
+        \\}
+        \\
+        \\factorial(5) |> add(5)
     ;
     std.debug.print("Input:\n{s}\n\n", .{input});
 

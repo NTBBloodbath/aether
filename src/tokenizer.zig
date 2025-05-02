@@ -179,7 +179,7 @@ pub const Tokenizer = struct {
                         ident;
                 },
                 else => {
-                    std.debug.print("Error at line {d}, column {d} - Invalid character '{c}'\n", .{ self.line, self.column, char });
+                    std.debug.print("Error at line {d}:{d} - Invalid character '{c}'\n", .{ self.line, self.column, char });
                     return error.InvalidCharacter;
                 },
             }

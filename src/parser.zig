@@ -222,6 +222,7 @@ pub const Parser = struct {
     }
 
     fn parseFunctionCall(self: *Parser, callee: *ast.Expression) !*ast.Expression {
+        // TODO: validate argument types and arity
         try self.advance(); // Skip '('
 
         var args = std.ArrayList(*ast.Expression).init(self.allocator);
