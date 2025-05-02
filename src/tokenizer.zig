@@ -13,6 +13,7 @@ pub const TokenType = enum {
     Modulus,
     Pipe,
     Colon,
+    Semicolon,
     Comma,
     Newline,
     KeywordLet,
@@ -97,6 +98,12 @@ pub const Tokenizer = struct {
                 '/' => return self.singleToken(.Slash),
                 '%' => return self.singleToken(.Modulus),
                 ':' => return self.singleToken(.Colon),
+                ';' => {
+                    // Skip all characters until end of line then skip to next token after comment
+                    while (self.position < self.source.len and self.source[self.position] != '\n')
+                        self.position += 1;
+                    continue;
+                },
                 ',' => return self.singleToken(.Comma),
                 '|' => {
                     if (self.position + 1 < self.source.len and self.source[self.position + 1] == '>') {

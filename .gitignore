@@ -10,3 +10,6 @@ zig-out/
 
 # Direnv
 /.direnv
+
+# Testing cache
+test.ae

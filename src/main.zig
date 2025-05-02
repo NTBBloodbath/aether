@@ -1,18 +1,18 @@
-//! By convention, main.zig is where your main function lives in the case that
-//! you are building an executable. If you are making a library, the convention
-//! is to delete this file and start with root.zig instead.
-
 const std = @import("std");
 
 /// This imports the separate module containing `root.zig`. Take a look in `build.zig` for details.
-const lib = @import("aether");
+// const lib = @import("aether");
+
+const clap = @import("clap");
 
 const Tokenizer = @import("tokenizer.zig").Tokenizer;
 const Parser = @import("parser.zig").Parser;
 const ast = @import("ast.zig");
 const VM = @import("vm.zig").VM;
 
-// Recursively print AST nodes
+const Version = std.SemanticVersion{ .major = 0, .minor = 1, .patch = 0 };
+
+// Recursively print AST nodes for debugging
 fn printStatement(stmt: *ast.Statement, indent: usize) void {
     // HACK: I wanted to use ** but it requires comptime and fucks up the compilation
     var i: usize = 0;
@@ -100,64 +100,92 @@ fn printExpr(expr: *ast.Expression, indent: usize) void {
     }
 }
 
-pub fn main() !void {
-    const input =
-        \\fn add(a: int, b: int) -> int {
-        \\    a + b
-        \\}
-        \\
-        \\fn factorial(n) -> int {
-        \\    if n == 0 {
-        \\        1
-        \\    } else {
-        \\        n * factorial(n - 1)
-        \\    }
-        \\}
-        \\
-        \\factorial(5) |> add(5)
-    ;
-    std.debug.print("Input:\n{s}\n\n", .{input});
+fn readFile(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
+    // TODO: check for Aether's file extension
+    const file = std.fs.cwd().openFile(path, .{}) catch |err| {
+        std.debug.print("Error opening '{s}': {s}\n", .{path, @errorName(err)});
+        return err;
+    };
+    defer file.close();
 
+    return file.readToEndAlloc(allocator, std.math.maxInt(usize)) catch |err| {
+        std.debug.print("Error reading '{s}': {s}\n", .{path, @errorName(err)});
+        return err;
+    };
+}
+
+pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
+
+    const stdout_file = std.io.getStdOut().writer();
+    var bw = std.io.bufferedWriter(stdout_file);
+    const stdout = bw.writer();
+
+    // Setup CLI
+    const params = comptime clap.parseParamsComptime(
+        \\-h, --help       Display this help and exit.
+        \\-v, --version    Print version and exit.
+        \\-e, --eval <str> Evaluate inline code.
+        \\<str>            Script file to execute.
+        \\
+    );
+    var diag = clap.Diagnostic{};
+    var res = clap.parse(clap.Help, &params, clap.parsers.default, .{
+        .diagnostic = &diag,
+        .allocator = allocator,
+    }) catch |err| {
+        diag.report(std.io.getStdErr().writer(), err) catch {};
+        return err;
+    };
+    defer res.deinit();
+
+    if (res.args.help != 0) {
+        try stdout.print("Usage: aether [OPTIONS] <SCRIPT>\n\n", .{});
+        try bw.flush();
+
+        try clap.help(stdout_file, clap.Help, &params, .{});
+        return;
+    }
+    if (res.args.version != 0) {
+        try stdout.print("Aether {d}.{d}.{d}\n", .{Version.major, Version.minor, Version.patch});
+        try bw.flush();
+
+        return;
+    }
+
+    // Get input source
+    const input: []const u8 = if (res.positionals.len > 0)
+        try readFile(allocator, res.positionals[0].?)
+    else if (res.args.eval) |code|
+        code
+    else {
+        try std.io.getStdErr().writer().print("Usage: aether [OPTIONS] <SCRIPT>\n\n", .{});
+
+        try clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{});
+        std.process.exit(1);
+    };
 
     var tokenizer = Tokenizer{ .source = input };
     var parser = try Parser.init(allocator, &tokenizer);
 
     const program = try parser.parseProgram();
-    std.debug.print("Parsed AST:\n", .{});
-    for (program.statements.items) |stmt| {
-        printStatement(stmt, 0);
-    }
+    // std.debug.print("Parsed AST:\n", .{});
+    // for (program.statements.items) |stmt| {
+    //     printStatement(stmt, 0);
+    // }
 
     var vm = try VM.init(std.heap.page_allocator);
     for (program.statements.items) |stmt| {
         try vm.eval(stmt);
     }
 
-    if (vm.stack.items.len < 1) {
-        std.debug.print("\nOutput:\nNone\n", .{});
-    } else {
-        const stdout_file = std.io.getStdOut().writer();
-        var bw = std.io.bufferedWriter(stdout_file);
-        const stdout = bw.writer();
-
-        std.debug.print("\nOutput:\n", .{});
+    if (vm.stack.items.len > 0) {
+        // std.debug.print("\nOutput:\n", .{});
         try vm.stack.items[0].format("", .{}, stdout);
         try stdout.writeAll("\n");
-
-        try bw.flush(); // Don't forget to flush!
     }
 
-    // stdout is for the actual output of your application, for example if you
-    // are implementing gzip, then only the compressed bytes should be sent to
-    // stdout, not any debugging messages.
-    // const stdout_file = std.io.getStdOut().writer();
-    // var bw = std.io.bufferedWriter(stdout_file);
-    // const stdout = bw.writer();
-    //
-    // try stdout.print("Run `zig build test` to run the tests.\n", .{});
-    //
-    // try bw.flush(); // Don't forget to flush!
+    try bw.flush();
 }
