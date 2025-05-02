@@ -1,3 +1,5 @@
+// TODO: improve error handling even more, implement error recovery
+
 const std = @import("std");
 
 const ast = @import("ast.zig");
@@ -55,7 +57,7 @@ pub const Parser = struct {
         return program;
     }
 
-    pub fn parseStatement(self: *Parser) !*ast.Statement {
+    pub fn parseStatement(self: *Parser) ParserError!*ast.Statement {
         return switch (self.current_token.type) {
             .KeywordLet => blk: {
                 const decl = try self.parseVariableDecl();
@@ -124,7 +126,12 @@ pub const Parser = struct {
                         try args.append(left);
                         left = try ast.FunctionCall.create(self.allocator, right, args);
                     },
-                    else => return error.PipeRightNotCallable,
+                    // zig fmt: off
+                    else => return self.failWithContext(
+                        error.PipeRightNotCallable,
+                        "Right side of |> must be a function call, got '{s}'",
+                        .{@tagName(right.*)}
+                    ),
                 }
             } else {
                 const right = try self.parsePrecedence(op_prec + 1);
@@ -147,7 +154,7 @@ pub const Parser = struct {
             var type_name: ?[]const u8 = null;
             if (self.current_token.type == .Colon) {
                 try self.advance();
-                try isValidType(self.current_token.type);
+                try self.validateType(self.current_token.type);
                 type_name = self.current_token.value;
                 try self.advance();
             }
@@ -164,7 +171,7 @@ pub const Parser = struct {
         try self.expect(.Arrow);
         const return_type = self.current_token.type;
         const return_type_name = self.current_token.value;
-        try isValidType(return_type);
+        try self.validateType(return_type);
         try self.advance();
 
         // Parse body
@@ -188,7 +195,7 @@ pub const Parser = struct {
             var param_type: ?[]const u8 = null;
             if (self.current_token.type == .Colon) {
                 try self.advance();
-                try isValidType(self.current_token.type);
+                try self.validateType(self.current_token.type);
                 param_type = self.current_token.value;
                 try self.advance();
             }
@@ -202,7 +209,7 @@ pub const Parser = struct {
         // Return type
         try self.expect(.Arrow);
         const return_type = self.current_token.value;
-        try isValidType(self.current_token.type);
+        try self.validateType(self.current_token.type);
         try self.advance();
 
         // Body
@@ -279,7 +286,12 @@ pub const Parser = struct {
                 try self.advance();
                 return ast.NilLiteral.create(self.allocator);
             },
-            else => return ParserError.UnexpectedToken,
+            // zig fmt: off
+            else => return self.failWithContext(
+                error.UnexpectedToken,
+                "Unexpected token in expression: '{s}'",
+                .{@tagName(self.current_token.type)}
+            ),
         };
     }
 
@@ -315,7 +327,7 @@ pub const Parser = struct {
             const token_type = self.current_token.type;
             type_name = self.current_token.value;
             // Check if the type is valid
-            try isValidType(token_type);
+            try self.validateType(token_type);
             try self.advance();
         }
 
@@ -355,7 +367,12 @@ pub const Parser = struct {
 
     fn parseIdentifier(self: *Parser) !Token {
         if (self.current_token.type != .Identifier) {
-            return ParserError.ExpectedIdentifier;
+            // zig fmt: off
+            return self.failWithContext(
+                error.ExpectedIdentifier,
+                "Expected identifier, found '{s}'",
+                .{@tagName(self.current_token.type)}
+            );
         }
         const token = self.current_token;
         try self.advance();
@@ -368,18 +385,12 @@ pub const Parser = struct {
 
     fn expect(self: *Parser, expected: TokenType) !void {
         if (self.current_token.type != expected) {
-            // TODO: convert the token types into their value equivalent for better errors
             // zig fmt: off
-            std.debug.print(
-                "Error at line {d}, column {d} - Expected '{s}', found '{s}'\n",
-                .{
-                    self.current_token.line,
-                    self.current_token.column,
-                    @tagName(expected),
-                    @tagName(self.current_token.type)
-                }
+            return self.failWithContext(
+                error.SyntaxError,
+                "Expected '{s}', found '{s}'",
+                .{@tagName(expected), @tagName(self.current_token.type)}
             );
-            return ParserError.SyntaxError;
         }
 
         try self.advance();
@@ -396,9 +407,64 @@ pub const Parser = struct {
         };
     }
 
-    fn isValidType(token_type: TokenType) !void {
-        if (token_type != .TypeInt and token_type != .TypeFloat and token_type != .TypeBool and token_type != .TypeChar and token_type != .TypeString) {
-            return ParserError.InvalidType;
+    fn validateType(self: *Parser, token_type: TokenType) !void {
+        if (
+            token_type != .TypeInt and
+            token_type != .TypeFloat and
+            token_type != .TypeBool and
+            token_type != .TypeChar and
+            token_type != .TypeString
+        ) {
+            // zig fmt: off
+            return self.failWithContext(
+                error.InvalidType,
+                "'{s}' is not a valid type",
+                .{self.current_token.value}
+            );
         }
+    }
+
+    fn failWithContext(self: *Parser, err: ParserError, comptime fmt: []const u8, args: anytype) ParserError {
+        const token = self.current_token;
+
+        var line_start = token.start;
+        while (line_start > 0 and self.tokenizer.source[line_start - 1] != '\n') {
+            line_start -= 1;
+        }
+        var line_end = token.end;
+        while (line_end < self.tokenizer.source.len and
+            self.tokenizer.source[line_end] != '\n')
+        {
+            line_end += 1;
+        }
+        const error_line = self.tokenizer.source[line_start..line_end];
+
+        // Calculate column position within this line
+        const column_in_line = if (token.line == 1)
+            token.column
+        else
+            token.column - 1;
+
+        // Create padding matching the column position for the caret
+        var padding_buf: [256]u8 = undefined;
+        const padding_len = @min(column_in_line - 1, padding_buf.len);
+        @memset(padding_buf[0..padding_len], ' ');
+        const padding = padding_buf[0..padding_len];
+
+        std.debug.print(
+            \\[{s}] Error at line {d}:{d}
+            \\{s}
+            \\{s}^
+            \\
+        , .{
+            @errorName(err),
+            token.line,
+            token.column,
+            error_line,
+            padding,
+        });
+        std.debug.print(fmt ++ "\n", args);
+
+        return err;
     }
 };

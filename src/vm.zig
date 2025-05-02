@@ -81,7 +81,10 @@ pub const VM = struct {
                     const is_bool = std.mem.eql(u8, t, "bool") and value == .Bool;
                     const is_char = std.mem.eql(u8, t, "char") and value == .Char;
                     const is_str = std.mem.eql(u8, t, "string") and value == .String;
-                    if (!is_float and !is_int and !is_bool and !is_char and !is_str) return error.TypeMismatch;
+                    if (!is_float and !is_int and !is_bool and !is_char and !is_str) {
+                        std.debug.print("Type mismatch: expected '{s}', got '{s}'\n", .{t, getTypeName(value)});
+                        return error.TypeMismatch;
+                    }
                 }
 
                 const variable = try self.env.values.getOrPut(v.name);
@@ -312,8 +315,10 @@ pub const VM = struct {
     }
 
     fn checkType(expected: ?[]const u8, actual: Value) !void {
+        const actual_type_str = getTypeName(actual);
         if (expected) |exp| {
-            if (!std.mem.eql(u8, exp, getTypeName(actual))) {
+            if (!std.mem.eql(u8, exp, actual_type_str)) {
+                std.debug.print("Type mismatch: expected '{s}', got '{s}'\n", .{exp, actual_type_str});
                 return error.TypeMismatch;
             }
         }
